@@ -396,6 +396,7 @@ header div, main { max-width: 1440px; }
       <h1 id="reports-title">업무 이력</h1>
       <button type="button" class="secondary" id="clear-demo-tasks" hidden>데모 업무 모두 삭제</button>
     </div>
+    <button type="button" id="archive-job-history" class="secondary" hidden>채용공고 이력 지우기</button>
     <div id="history-filters" class="actions history-filters" role="group" aria-label="직원별 업무 이력"></div>
     <div id="reports"></div>
   </section>
@@ -545,7 +546,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js?v=natural-schedule"></script>
-<script defer src="job-automation-core.js?v=weekly-reservations"></script>
+<script defer src="job-automation-core.js?v=archive-history"></script>
 <script defer src="job-automation.js?v=review-history"></script>
 
 <script>
@@ -1829,6 +1830,10 @@ const historyFilters = document.querySelector('#history-filters');
 const reviewToast = document.querySelector('#review-toast');
 let historyEmployee = '';
 let jobReports = [];
+const archiveJobHistory = document.querySelector('#archive-job-history');
+archiveJobHistory.onclick = () => window.dispatchEvent(new CustomEvent('cat-office-archive-job-history', {
+  detail: { restore: archiveJobHistory.dataset.restore === 'true' }
+}));
 let newestReview;
 
 function renderHistory() {
@@ -1873,6 +1878,9 @@ function renderHistory() {
 }
 window.addEventListener('cat-office-job-reports', event => {
   jobReports = event.detail.history;
+  archiveJobHistory.hidden = !jobReports.length && !event.detail.archived;
+  archiveJobHistory.dataset.restore = String(!jobReports.length && Boolean(event.detail.archived));
+  archiveJobHistory.textContent = archiveJobHistory.dataset.restore === 'true' ? '채용공고 이력 복원' : '채용공고 이력 지우기';
   pendingJobs = event.detail.pending || [];
   renderPending();
   const completed = event.detail.completed;

@@ -91,11 +91,23 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   }
 
   function publishReports(config, completed) {
-    const history = config?.reports || (config?.report ? [config.report] : []);
+    const reports = config?.reports || (config?.report ? [config.report] : []);
+    const archived = config?.archivedReportCount || 0;
+    const history = reports.slice(archived);
     window.dispatchEvent(new CustomEvent('cat-office-job-reports', {
-      detail: { history, completed, pending: config?.pendingJobs || [] }
+      detail: { history, completed, archived, pending: config?.pendingJobs || [] }
     }));
   }
+
+  window.addEventListener('cat-office-archive-job-history', event => {
+    void navigator.locks.request(key, () => {
+      const config = read();
+      if (!config) return;
+      config.archivedReportCount = event.detail.restore ? 0 : (config.reports?.length ?? Number(Boolean(config.report)));
+      write(config);
+      publishReports(config);
+    });
+  });
 
   function render(config, message) {
     pause.hidden = runNow.hidden = !config;
