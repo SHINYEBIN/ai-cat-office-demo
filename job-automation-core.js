@@ -74,7 +74,8 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     runNow.disabled = running || Boolean(config?.paused);
     status.textContent = message || (config
       ? (config.repeat === false ? '한 번 ' : '매일 ') + config.time + ' · 서울 시간 · ' +
-        (config.paused ? '일시정지' : config.repeat === false && config.lastRun ? '실행 완료' : '예약 중') +
+        (config.paused ? '일시정지' : config.pendingRun ? '처리 중' :
+          config.repeat === false && config.lastRun ? '실행 완료' : '예약 중') +
         (config.firstDay && !config.lastRun ? '\n첫 실행 ' + config.firstDay + ' ' + config.time : '') +
         (config.report ? '\n' + config.report.message : '') : '');
     status.style.whiteSpace = 'pre-line';
@@ -107,11 +108,11 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         const config = read();
         const now = new Date(Date.now() + 9 * 3600000).toISOString();
         const day = now.slice(0, 10);
-        if (!config || config.paused || (!manual &&
+        if (!config || config.paused || (!manual && !config.pendingRun &&
             ((config.firstDay && day < config.firstDay) || now.slice(11, 16) < config.time ||
               config.lastRun === day || (config.repeat === false && config.lastRun)))) return;
         running = true;
-        config.lastRun = day;
+        config.pendingRun = true;
         write(config);
         render(config, searchMessage);
         try {
@@ -159,6 +160,8 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           running = false;
           showPhase?.();
           if (read()?.revision === config.revision) {
+            config.lastRun = day;
+            delete config.pendingRun;
             write(config);
             if (feedback && config.report) feedback.textContent = config.report.message;
           }
@@ -189,6 +192,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     const config = { ...previous, request, time, terms, firstDay, repeat,
       profile: profile ?? previous?.profile ?? defaultProfile, paused: false, revision: crypto.randomUUID() };
     delete config.lastRun;
+    delete config.pendingRun;
     write(config);
     render(config);
     return config;
@@ -252,9 +256,23 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   };
   runNow.onclick = () => void check(true);
   window.addEventListener('storage', event => {
-    if (event.key === key && dialog.open) render(read());
+    if (event.key === key) restoreStatus();
   });
+  function restoreStatus() {
+    try {
+      const config = read();
+      if (!config) return;
+      if (!running) render(config);
+      if (!feedback || running) return;
+      feedback.textContent = config.pendingRun ? '루루의 조사 작업을 이어서 처리해요.'
+        : config.report?.message || (config.firstDay ? reservationMessage(config.time, config)
+          : '루루 채용공고 조사 예약 · 매일 ' + config.time + ' (서울 시간)');
+    } catch {
+      if (feedback) feedback.textContent = '저장된 루루 예약을 읽지 못했어요.';
+    }
+  }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); });
   setInterval(check, 15000);
+  restoreStatus();
   void check();
 }
