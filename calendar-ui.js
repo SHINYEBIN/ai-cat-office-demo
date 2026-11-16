@@ -56,9 +56,9 @@
   window.addEventListener('cat-office-register-job-deadlines', event => {
     const { jobs, result } = event.detail;
     const existing = new Set(events.map(item => item.id));
-    const additions = jobs.filter(job => !existing.has('alio-' + job.id)).map(job => ({
-      id: 'alio-' + job.id, title: '[지원 마감] ' + job.organization + ' · ' + job.title,
-      start: job.deadline, end: '', allDay: true, source: job.url
+    const additions = jobs.filter(job => !existing.has('demo-job-' + job.id)).map(job => ({
+      id: 'demo-job-' + job.id, title: '[데모 지원 마감] ' + job.organization + ' · ' + job.title,
+      start: job.deadline, end: '', allDay: true
     }));
     if (!additions.length || save([...events, ...additions])) result.registered = additions.length;
   });

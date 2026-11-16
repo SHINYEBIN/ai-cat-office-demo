@@ -431,19 +431,18 @@ header div, main { max-width: 1440px; }
   <form class="schedule-form" id="job-automation-form">
     <label>반복 요청 <input name="request" required maxlength="120" placeholder="매일 오전 9시에 채용공고 조사해줘."></label>
     <label>코코 검토 조건 (선택) <input name="keywords" maxlength="120" placeholder="예: 서울, 정규직"></label>
-    <label>최종 학력
+    <label>가상 지원자 학력
       <select name="education">
         <option value="">미입력</option><option value="0">고졸 이하</option><option value="1">전문학사</option>
         <option value="2">학사</option><option value="3">석사</option><option value="4">박사</option>
       </select>
     </label>
-    <label>관련 경력 (년) <input name="experience" type="number" min="0" max="60" step="0.5" placeholder="예: 2 또는 신입은 0"></label>
-    <p class="muted">학력과 경력은 이 브라우저에 저장돼요. 코코가 원문의 명확한 학력·경력 요건을 비교하고, 자격증·전공·직무별 조건 등 추가 확인이 필요하면 일정 등록을 보류해요.</p>
-    <p class="muted">캣 오피스를 열어 두면 예약 시각에 실행해요. 공개 잡알리오 공공기관 목록 첫 페이지에서 쉼표로 나눈 조건을 모두 충족하는 공고를 최대 5건 선별해요.</p>
+    <label>가상 지원자 관련 경력 (년) <input name="experience" type="number" min="0" max="60" step="0.5" placeholder="예: 2"></label>
+    <p class="muted">가상 공고로 루루 조사, 코코 검토, 보리 마감 일정 등록을 체험해요. 기본 가상 지원자는 학사·경력 2년이에요. 저장한 뒤 ‘지금 실행’으로 바로 볼 수 있어요.</p>
     <div class="actions">
       <button type="submit">예약 저장</button>
       <button type="button" id="job-automation-pause" class="secondary" hidden>일시정지</button>
-      <button type="button" id="job-automation-run" class="secondary" hidden>지금 조사</button>
+      <button type="button" id="job-automation-run" class="secondary" hidden>지금 실행</button>
     </div>
   </form>
   <p id="job-automation-status" role="status"></p>
@@ -536,6 +535,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js"></script>
+<script defer src="job-automation.js"></script>
 
 <script>
 const employees = {
