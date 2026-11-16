@@ -4,7 +4,6 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   const form = document.querySelector('#job-automation-form');
   const status = document.querySelector('#job-automation-status');
   const feedback = document.querySelector('#feedback');
-  const reportList = document.querySelector('#job-automation-report');
   const pause = document.querySelector('#job-automation-pause');
   const runNow = document.querySelector('#job-automation-run');
   const submit = form.querySelector('button[type=submit]');
@@ -75,6 +74,19 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     return { outcome: '1차 승인', reason: '공고에서 확인한 학력·경력 조건을 충족해요.' };
   }
 
+  function assessRegion(region) {
+    if (/서울|경기/.test(region || '')) return;
+    if (!region || /외\s*\d|미정|전국/.test(region)) {
+      return { outcome: '확인 필요', reason: '서울·경기 근무지가 있는지 원문에서 확인해 주세요.' };
+    }
+    return { outcome: '반려', reason: '서울·경기 외 근무지 · ' + region };
+  }
+
+  function publishReports(config, completed) {
+    const history = config?.reports || (config?.report ? [config.report] : []);
+    window.dispatchEvent(new CustomEvent('cat-office-job-reports', { detail: { history, completed } }));
+  }
+
   function render(config, message) {
     pause.hidden = runNow.hidden = !config;
     pause.textContent = config?.paused ? '재개' : '일시정지';
@@ -87,25 +99,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         (config.firstDay && !config.lastRun ? '\n첫 실행 ' + config.firstDay + ' ' + config.time : '') +
         (config.report ? '\n' + config.report.message : '') : '');
     status.style.whiteSpace = 'pre-line';
-    reportList.replaceChildren();
-    for (const job of config?.report?.jobs || []) {
-      const row = document.createElement('li');
-      const link = document.createElement(job.url ? 'a' : 'strong');
-      if (job.url) {
-        link.href = job.url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-      }
-      link.textContent = job.organization + ' · ' + job.title;
-      row.append(link, document.createTextNode(' · 마감 ' + job.deadline));
-      if (job.outcome) {
-        const review = document.createElement('p');
-        review.className = 'muted';
-        review.textContent = '코코 · ' + job.outcome + ' · ' + job.reason;
-        row.append(review);
-      }
-      reportList.append(row);
-    }
+
   }
 
   async function check(manual = false) {
@@ -133,14 +127,17 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           const reviews = [];
           for (const job of shortlist) {
             if (read()?.revision !== config.revision) return;
-            let outcome;
-            try {
-              const requirements = await readRequirements(job);
-              outcome = assessRequirements(requirements, config.profile);
-            } catch (error) {
-              if (error.rateLimited) throw error;
-              outcome = { outcome: '확인 필요', reason: '원문 조회에 실패했어요.' };
+            let outcome = config.seoulGyeonggiOnly !== false ? assessRegion(job.region) : undefined;
+            if (!outcome) {
+              try {
+                const requirements = await readRequirements(job);
+                outcome = assessRequirements(requirements, config.profile);
+              } catch (error) {
+                if (error.rateLimited) throw error;
+                outcome = { outcome: '확인 필요', reason: '원문 조회에 실패했어요.' };
+              }
             }
+            if (outcome.outcome === '조건 미충족') outcome.outcome = '반려';
             reviews.push({ ...job, ...outcome });
           }
           await reviewDisplay;
@@ -155,8 +152,14 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           if (result.registered === undefined) throw new Error('보리가 일정을 저장하지 못했어요.');
           for (const job of additions) registered.add(job.id);
           config.registered = [...registered];
-          config.report = { jobs: reviews, message: day + ' · 루루 조사 ' + jobs.length +
-            '건 → 코코 1차 승인 ' + approved.length + '건 · 확인 필요 ' +
+          const addedIds = new Set(result.registeredIds);
+          const rejected = reviews.filter(job => job.outcome === '반려').length;
+          const needsReview = reviews.filter(job => job.outcome === '확인 필요').length;
+          config.report = { jobs: reviews.map(job => ({ ...job, calendarState: job.outcome === '1차 승인'
+            ? (addedIds.has(job.id) ? '신규 등록' : '이전 등록') : '' })),
+            counts: { approved: approved.length, rejected, needsReview, registered: result.registered },
+            message: day + ' · 루루 조사 ' + jobs.length +
+            '건 → 코코 1차 승인 ' + approved.length + '건 · 반려 ' + rejected + '건 · 확인 필요 ' +
             reviews.filter(job => job.outcome === '확인 필요').length + '건 → 보리 신규 등록 ' + result.registered + '건' };
           if (!approved.length) config.report.message += ' · 승인된 공고가 없어 등록할 일정이 없어요.';
           else if (!result.registered) config.report.message += ' · 승인된 공고는 이미 처리했어요.';
@@ -168,10 +171,15 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           running = false;
           showPhase?.();
           if (read()?.revision === config.revision) {
+            const previous = read();
+            config.report.completedAt = Date.now();
+            const older = previous.reports || (previous.report ? [previous.report] : []);
+            config.reports = [...older, config.report];
             config.lastRun = day;
             delete config.pendingRun;
             write(config);
             if (feedback && config.report) feedback.textContent = config.report.message;
+            publishReports(config, config.report);
           }
           render(read());
         }
@@ -205,17 +213,20 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     form.elements.keywords.value = config?.terms.join(', ') || '';
     form.elements.education.value = config?.profile?.education ?? defaultProfile?.education ?? '';
     form.elements.experience.value = config?.profile?.experience ?? defaultProfile?.experience ?? '';
+    form.elements.seoulGyeonggiOnly.checked = config?.seoulGyeonggiOnly !== false;
     render(config, navigator.locks ? '' : '반복 업무를 지원하는 PC용 Chrome에서 열어 주세요.');
     dialog.showModal();
   }
 
-  function saveReservation(request, time, terms, profile) {
+  function saveReservation(request, time, terms, profile, seoulGyeonggiOnly) {
     const previous = read();
     const firstDay = reservationStart(request, time);
     if (!firstDay) return;
     const repeat = /매일/.test(request);
     const config = { ...previous, request, time, terms, firstDay, repeat,
-      profile: profile ?? previous?.profile ?? defaultProfile, paused: false, revision: crypto.randomUUID() };
+      profile: profile ?? previous?.profile ?? defaultProfile,
+      seoulGyeonggiOnly: seoulGyeonggiOnly ?? previous?.seoulGyeonggiOnly ?? true,
+      paused: false, revision: crypto.randomUUID() };
     delete config.lastRun;
     delete config.pendingRun;
     write(config);
@@ -269,7 +280,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     const config = saveReservation(request, time, terms, {
       education: form.elements.education.value,
       experience: form.elements.experience.value
-    });
+    }, form.elements.seoulGyeonggiOnly.checked);
     if (!config) status.textContent = '오늘의 해당 시각이 지났어요. 내일 또는 이후 시각을 입력해 주세요.';
   };
   pause.onclick = () => {
@@ -289,6 +300,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     try {
       const config = read();
       if (!config) return;
+      publishReports(config);
       if (!running) render(config);
       if (!feedback || running) return;
       feedback.textContent = config.pendingRun ? '루루의 조사 작업을 이어서 처리해요.'

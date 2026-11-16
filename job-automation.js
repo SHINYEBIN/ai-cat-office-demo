@@ -6,7 +6,9 @@
       { id: 'sample-research', title: '콘텐츠 연구원', region: '서울', employment: '정규직',
         requirements: '박사학위 소지자' },
       { id: 'sample-data', title: '데이터 운영 담당', region: '서울', employment: '정규직',
-        requirements: '정보처리기사 자격증 필수' }
+        requirements: '정보처리기사 자격증 필수' },
+      { id: 'sample-busan', title: '부산 사무 지원', region: '부산', employment: '정규직',
+        requirements: '학력 무관\n경력 무관' }
     ].map(job => ({ ...job, id: job.id + '-' + day, organization: '가상 캣 컴퍼니', deadline: day }));
   }
 

@@ -60,7 +60,10 @@
       id: 'demo-job-' + job.id, title: '[데모 지원 마감] ' + job.organization + ' · ' + job.title,
       start: job.deadline, end: '', allDay: true
     }));
-    if (!additions.length || save([...events, ...additions])) result.registered = additions.length;
+    if (!additions.length || save([...events, ...additions])) {
+      result.registered = additions.length;
+      result.registeredIds = additions.map(item => item.id.replace(/^(?:alio-|demo-job-)/, ''));
+    }
   });
 
   function scheduleRows(items, editable) {
@@ -140,6 +143,47 @@
     status.textContent = '';
     form.elements.title.focus();
   }
+
+  function parseNaturalSchedule(description) {
+    const dayMatch = /내일|오늘|모레|\d{4}-\d{2}-\d{2}/.exec(description);
+    if (!dayMatch) return;
+    const word = dayMatch[0];
+    const day = /\d/.test(word) ? word : new Date(Date.parse(localDate()) +
+      ({ 오늘: 0, 내일: 1, 모레: 2 })[word] * 86400000).toISOString().slice(0, 10);
+    const validDay = new Date(day);
+    if (!Number.isFinite(+validDay) || validDay.toISOString().slice(0, 10) !== day) return;
+    const timePattern = /(?:(오전|오후)\s*)?(\d{1,2})\s*(?:시(?:\s*(?:(\d{1,2})\s*분|반))?|:\s*(\d{2}))/g;
+    const times = [...description.matchAll(timePattern)];
+    if (times.length > 2) return;
+    let inheritedPeriod;
+    const entries = times.map(([text, period, hour, minute, clockMinute]) => {
+      const h = Number(hour);
+      const m = Number(minute || clockMinute || (text.includes('반') ? 30 : 0));
+      inheritedPeriod = period || inheritedPeriod;
+      const meridiem = period || (!clockMinute && h <= 12 ? inheritedPeriod : undefined);
+      if (h > 23 || m > 59 || (meridiem && (h < 1 || h > 12))) return;
+      const hours = meridiem ? h % 12 + (meridiem === '오후' ? 12 : 0) : h;
+      return day + 'T' + [hours, m].map(value => String(value).padStart(2, '0')).join(':');
+    });
+    if (entries.some(value => !value) || (entries[1] && entries[1] <= entries[0])) return;
+    let title = description.replace(dayMatch[0], '').replace(/하루\s*종일|종일|\s*일정\s*(?:추가|등록)해\s*줘[.!]?$/g, '');
+    for (const time of times) title = title.replace(time[0], '');
+    title = title.replace(/^\s*(?:(?:부터|까지|에|~|–|,)\s*)+/, '').trim();
+    if (!title) return;
+    return { title, start: entries[0] || day, end: entries[1] || '', allDay: !entries.length };
+  }
+
+  const naturalForm = document.querySelector('#schedule-natural-form');
+  naturalForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const draft = parseNaturalSchedule(naturalForm.elements.description.value.trim());
+    if (!draft) {
+      status.textContent = '날짜와 내용을 알려 주세요. 예를 들어 “내일 오후 2시에 콘티 회의”라고 쓸 수 있어요.';
+      return;
+    }
+    openEditor(draft);
+    status.textContent = '보리가 분류한 일정을 확인하고 저장해 주세요.';
+  });
 
   function showBriefing(day) {
     document.querySelector('#briefing-date').textContent = day + ' · 서울 시간';
