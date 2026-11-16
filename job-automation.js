@@ -14,6 +14,11 @@
     key: 'cat-office-public-demo-job-automation',
     listJobs: demoListings,
     readRequirements: job => job.requirements,
+    showManualRun() {
+      document.querySelector('#job-automation').close();
+      location.hash = '#office';
+      document.querySelector('#office').scrollIntoView({ block: 'start' });
+    },
     showPhase(employee, label) {
       window.dispatchEvent(new CustomEvent('cat-office-automation-phase', { detail: { employee, label } }));
       if (employee) return new Promise(resolve => setTimeout(resolve, 2400));

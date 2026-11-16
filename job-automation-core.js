@@ -1,5 +1,5 @@
 // Shared by the PC office and the static public demo.
-function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, searchMessage, reviewMessage, reservationMessage, showPhase }) {
+function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, searchMessage, reviewMessage, reservationMessage, showPhase, showManualRun }) {
   const dialog = document.querySelector('#job-automation');
   const form = document.querySelector('#job-automation-form');
   const status = document.querySelector('#job-automation-status');
@@ -115,6 +115,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         write(config);
         render(config, searchMessage);
         try {
+          if (manual) showManualRun?.();
           const [jobs] = await Promise.all([listJobs(day), showPhase?.('lulu', '채용공고 조사')]);
           const shortlist = jobs.filter(job => job.deadline >= day && matches(job, config.terms))
             .sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 5);
