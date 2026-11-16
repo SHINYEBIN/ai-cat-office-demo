@@ -161,14 +161,6 @@
     if (!briefing.open) briefing.showModal();
   }
 
-  function checkMorning() {
-    const now = localDate();
-    const day = now.slice(0, 10);
-    if (now.slice(11, 16) < '08:30' || lastBriefing === day || document.hidden ||
-        document.querySelector('dialog[open]')) return;
-    window.dispatchEvent(new CustomEvent('bori-briefing-request', { detail: { day } }));
-  }
-
   let briefingAudio;
 
   function prepareBriefingAudio() {
@@ -301,8 +293,4 @@
     } catch {}
   });
   render();
-  checkMorning();
-  setInterval(checkMorning, 15000);
-  document.addEventListener('visibilitychange', checkMorning);
-  window.addEventListener('hashchange', checkMorning);
 })();

@@ -154,9 +154,9 @@ header div, main { max-width: 1440px; }
 .manager-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .manager-controls button { min-width: 44px; min-height: 44px; touch-action: manipulation; }
 #manager-interact[disabled], .manager-key-hint { display: none; }
+.manager-key-hint:not([hidden]) { display: block; position: absolute; z-index: 1001; bottom: 5px; left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 12px; background: #30223e; color: white; font-size: 12px; white-space: nowrap; }
 @media (hover: hover) and (pointer: fine) {
   #manager-help, .manager-controls, #manager-interact { display: none; }
-  .manager-key-hint:not([hidden]) { display: block; position: absolute; z-index: 1001; bottom: 5px; left: 50%; transform: translateX(-50%); padding: 3px 9px; border-radius: 12px; background: #30223e; color: white; font-size: 12px; white-space: nowrap; pointer-events: none; }
 }
 .office-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .office-heading h2 { margin: 0; }
@@ -323,7 +323,7 @@ header div, main { max-width: 1440px; }
         </div>
         <strong>자료 선반</strong>
       </div>
-      <span class="manager-key-hint" id="manager-key-hint" hidden></span>
+      <button type="button" class="manager-key-hint" id="manager-key-hint" hidden></button>
     </div>
     <p class="muted" id="manager-help">화면의 방향 버튼으로 사장을 움직일 수 있어요.</p>
     <div class="manager-controls" role="group" aria-label="사장 이동" aria-describedby="manager-help">
@@ -768,6 +768,7 @@ function interactWithManagerSpot() {
   if (managerPose === 'resting') showManagerLine(restLines, performance.now());
 }
 managerInteract.addEventListener('click', interactWithManagerSpot);
+managerKeyHint.addEventListener('click', interactWithManagerSpot);
 deskMenu.querySelector('.desk-menu-actions').addEventListener('click', event => {
   const action = event.target.closest('[data-desk-action]')?.dataset.deskAction;
   if (!action) return;
@@ -812,7 +813,7 @@ managerControls.addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
   if (event.defaultPrevented || event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
-  if (event.code === 'KeyD' && nearbyManagerSpot) {
+  if ((event.code === 'KeyD' || event.key?.toLowerCase() === 'd') && nearbyManagerSpot) {
     event.preventDefault();
     if (!event.repeat) interactWithManagerSpot();
     return;
