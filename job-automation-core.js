@@ -16,6 +16,14 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
 
   function write(config) {
     localStorage.setItem(key, JSON.stringify(config));
+    publishReservation(config);
+  }
+
+  function publishReservation(config) {
+    window.dispatchEvent(new CustomEvent('cat-office-job-reservation', { detail: config ? {
+      time: config.time, firstDay: config.firstDay, repeat: config.repeat,
+      paused: config.paused, missed: config.missed, lastRun: config.lastRun
+    } : null }));
   }
 
   function parseRequest(request) {
@@ -314,6 +322,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   function restoreStatus() {
     try {
       const config = read();
+      publishReservation(config);
       if (!config) return;
       publishReports(config);
       if (!running) render(config);

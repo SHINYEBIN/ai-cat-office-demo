@@ -545,7 +545,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js?v=natural-schedule"></script>
-<script defer src="job-automation-core.js?v=desk-inbox"></script>
+<script defer src="job-automation-core.js?v=weekly-reservations"></script>
 <script defer src="job-automation.js?v=review-history"></script>
 
 <script>
@@ -623,10 +623,8 @@ const workPanel = document.querySelector('#work-panel');
 const reportPanel = document.querySelector('#report-panel');
 const workDate = document.querySelector('#work-date');
 const workStaff = document.querySelector('#work-staff');
-const taskDate = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' });
-const today = new Date();
-const todayValue = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
-  .map(part => String(part).padStart(2, '0')).join('-');
+const taskDate = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeZone: 'Asia/Seoul' });
+const todayValue = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
 workDate.value = todayValue;
 let selectedEmployee = Object.keys(employees)[0];
 for (const [id, [name]] of Object.entries(employees)) {
@@ -1739,7 +1737,7 @@ function renderJobReview(job) {
 }
 
 function renderPending() {
-  const pending = tasks.filter(task => ['scheduled', 'queued', 'running', 'review'].includes(task.status));
+  const pending = tasks.filter(task => ['queued', 'running', 'review'].includes(task.status));
   document.querySelector('#whiteboard-count').textContent = pending.length + pendingJobs.length + '건';
   const reviewCount = pending.filter(task => task.status === 'review').length + pendingJobs.length;
   managerReviewFiles.hidden = reviewCount === 0;
@@ -1898,6 +1896,12 @@ document.querySelector('#review-toast-open').onclick = () => {
   showPanel();
 };
 
+let jobReservation;
+window.addEventListener('cat-office-job-reservation', event => {
+  jobReservation = event.detail;
+  if (selectedEmployee === 'lulu') renderWork();
+});
+
 function renderWork() {
   for (const button of workStaff.children) {
     const selected = button.dataset.employee === selectedEmployee;
@@ -1905,23 +1909,50 @@ function renderWork() {
     button.setAttribute('aria-pressed', selected);
   }
   const owned = tasks.filter(task => task.employee === selectedEmployee);
-  const active = owned.filter(task => ['scheduled', 'queued', 'running', 'review'].includes(task.status) || task.generationError
+  const active = owned.filter(task => ['queued', 'running', 'review'].includes(task.status) || task.generationError
     || (task.output && task.status === 'done'));
   const remaining = document.querySelector('#employee-work');
   remaining.replaceChildren(...active.map(task => renderTaskCard(task, 'work')));
   if (!active.length) remaining.append(element('p', '남은 업무가 없습니다.', 'muted'));
 
-  const start = new Date((workDate.value || todayValue) + 'T00:00:00');
-  start.setDate(start.getDate() - (start.getDay() + 6) % 7);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 7);
-  document.querySelector('#work-week').textContent = taskDate.format(start) + ' ~ ' + taskDate.format(end - 1) + ' · 배정일 기준';
+  const dayMs = 86400000;
+  const selected = Date.parse((workDate.value || todayValue) + 'T00:00:00+09:00');
+  const dayOfWeek = new Date(selected + 9 * 3600000).getUTCDay();
+  const start = selected - (dayOfWeek + 6) % 7 * dayMs;
+  const end = start + 7 * dayMs;
+  document.querySelector('#work-week').textContent = taskDate.format(start) + ' ~ ' + taskDate.format(end - 1) + ' · 예약 시작일 및 배정일 기준';
   const weekly = document.querySelector('#weekly-work');
-  weekly.replaceChildren();
-  for (const task of owned.filter(task => task.createdAt >= +start && task.createdAt < +end).reverse()) {
-    weekly.append(element('p', taskDate.format(task.createdAt) + ' · ' + task.title + ' · ' + labels[task.status]));
+  const rows = owned.map(task => ({
+    date: task.scheduledAt || task.createdAt, title: task.title,
+    status: labels[task.status], timed: Boolean(task.scheduledAt), task
+  })).filter(item => item.date >= start && item.date < end);
+  if (selectedEmployee === 'lulu' && jobReservation) {
+    const config = jobReservation;
+    const currentSeoulDay = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    for (let date = start; date < end; date += dayMs) {
+      const day = new Date(date + 9 * 3600000).toISOString().slice(0, 10);
+      if (config.repeat === false && day !== (config.firstDay || config.lastRun)) continue;
+      if (config.repeat !== false && (day < (config.firstDay || currentSeoulDay) ||
+        (day < currentSeoulDay && day !== config.lastRun))) continue;
+      const dateTime = Date.parse(day + 'T' + config.time + ':00+09:00');
+      if (config.repeat !== false && day !== config.lastRun && dateTime < Date.now() - 60000) continue;
+      rows.push({
+        date: dateTime,
+        title: '채용공고 조사' + (config.repeat === false ? '' : ' · 매일'), timed: true,
+        status: config.missed ? '예약 시각 지남' : config.lastRun === day ? '실행 완료' :
+          config.paused ? '일시정지' : '예약 대기'
+      });
+    }
   }
-  if (!weekly.children.length) weekly.append(element('p', '이 주에 배정된 업무가 없습니다.', 'muted'));
+  rows.sort((a, b) => a.date - b.date);
+  weekly.replaceChildren(...rows.map(item => {
+    const row = element('div', '', 'actions');
+    row.append(element('p', (item.timed ? formatScheduledStart(item.date) : taskDate.format(item.date))
+      + ' · ' + item.title + ' · ' + item.status));
+    if (item.task?.status === 'scheduled') row.append(makeCancelButton(item.task, 'work'));
+    return row;
+  }));
+  if (!rows.length) weekly.append(element('p', '이 주에 예약되거나 배정된 업무가 없습니다.', 'muted'));
 }
 
 function renderTaskCard(task, view) {
