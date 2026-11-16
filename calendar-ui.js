@@ -185,6 +185,13 @@
     status.textContent = '보리가 분류한 일정을 확인하고 저장해 주세요.';
   });
 
+  window.addEventListener('cat-office-today-events', event => {
+    const { day } = event.detail;
+    event.detail.events = events.filter(item =>
+      item.start.slice(0, 10) <= day && (item.end || item.start).slice(0, 10) >= day)
+      .sort((a, b) => Number(Boolean(b.allDay)) - Number(Boolean(a.allDay)) || a.start.localeCompare(b.start));
+  });
+
   function showBriefing(day) {
     document.querySelector('#briefing-date').textContent = day + ' · 서울 시간';
     const today = events.filter(event =>

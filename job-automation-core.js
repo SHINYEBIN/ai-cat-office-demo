@@ -1,5 +1,5 @@
 // Shared by the PC office and the static public demo.
-function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, searchMessage, reviewMessage, reservationMessage, showPhase, showManualRun }) {
+function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, searchMessage, reviewMessage, reservationMessage, showPhase, showManualRun, background }) {
   const dialog = document.querySelector('#job-automation');
   const form = document.querySelector('#job-automation-form');
   const status = document.querySelector('#job-automation-status');
@@ -125,16 +125,17 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
 
   }
 
-  async function check(manual = false) {
+  async function check(manual = false, savedRun) {
     if (running || !navigator.locks) return;
     try {
       await navigator.locks.request(key, { ifAvailable: true }, async lock => {
         if (!lock) return;
         const config = read();
         const now = new Date(Date.now() + 9 * 3600000).toISOString();
-        const day = now.slice(0, 10);
+        const day = savedRun?.day || now.slice(0, 10);
         if (!config || config.paused || config.cancelled) return;
-        if (!manual && !config.pendingRun) {
+        if (savedRun && (savedRun.revision !== config.revision || config.importedRuns?.includes(savedRun.id))) return;
+        if (!manual && !savedRun && !config.pendingRun) {
           if (config.missed || config.lastRun === day || (config.repeat === false && config.lastRun)) return;
           const scheduledDay = config.repeat === false && config.firstDay ? config.firstDay : day;
           if (config.firstDay && day < config.firstDay) return;
@@ -153,11 +154,13 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         running = true;
         delete config.missed;
         config.pendingRun = true;
+        if (manual) config.pendingManual = true;
         write(config);
         render(config, searchMessage);
         try {
           if (manual) showManualRun?.();
-          const [jobs] = await Promise.all([listJobs(day), showPhase?.('lulu', '채용공고 조사')]);
+          if (savedRun?.error) throw Object.assign(new Error(savedRun.error), { rateLimited: savedRun.rateLimited });
+          const [jobs] = await Promise.all([savedRun ? savedRun.jobs : listJobs(day), showPhase?.('lulu', '채용공고 조사')]);
           const shortlist = jobs.filter(job => job.deadline >= day && matches(job, config.terms))
             .sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 5);
           render(config, reviewMessage);
@@ -168,7 +171,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
             let outcome = config.seoulGyeonggiOnly !== false ? assessRegion(job.region) : undefined;
             if (!outcome) {
               try {
-                const requirements = await readRequirements(job);
+                const requirements = savedRun ? savedRun.requirements[job.id] : await readRequirements(job);
                 outcome = assessRequirements(requirements, config.profile);
               } catch (error) {
                 if (error.rateLimited) throw error;
@@ -210,7 +213,9 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
             const older = previous.reports || (previous.report ? [previous.report] : []);
             config.reports = [...older, config.report];
             config.lastRun = day;
+            if (savedRun) config.importedRuns = [...(config.importedRuns || []), savedRun.id];
             delete config.pendingRun;
+            delete config.pendingManual;
             write(config);
             if (feedback && config.report) feedback.textContent = config.report.message;
             publishReports(config, config.report);
@@ -241,12 +246,35 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   function armReservation() {
     clearTimeout(reservationTimer);
     const config = read();
+    if (background) {
+      void syncBackground();
+      return;
+    }
     if (!config || config.paused || running || !navigator.locks) return;
     const nextAt = nextReservationAt(config);
     if (!Number.isFinite(nextAt)) return;
     const now = Date.now();
     const delay = nextAt <= now ? 250 : nextAt - now;
     reservationTimer = setTimeout(check, Math.min(delay, 2147483647));
+  }
+
+  let syncingBackground = false;
+  async function syncBackground() {
+    if (syncingBackground || running) return;
+    const config = read();
+    if (!config) return;
+    syncingBackground = true;
+    try {
+      const runs = await background(config);
+      if (!config.paused && !config.cancelled) {
+        for (const run of runs) await check(false, run);
+        if (read()?.pendingManual) await check(false);
+      }
+    } catch (error) {
+      if (background && feedback) feedback.textContent = error.message;
+    } finally {
+      syncingBackground = false;
+    }
   }
 
   function openSettings() {
@@ -271,6 +299,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       paused: false, revision: crypto.randomUUID() };
     delete config.lastRun;
     delete config.pendingRun;
+    delete config.pendingManual;
     delete config.missed;
     write(config);
     render(config);
@@ -280,7 +309,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
 
   window.addEventListener('cat-office-repeat-assignment', event => {
     const result = event.detail;
-    if (result.employee !== 'lulu') return;
+    if (result.employee !== 'lulu' || result.title.startsWith('자소서 준비 · ')) return;
     const recruiting = /채용\s*(?:공고|정보)|구인\s*공고|채용\s*조사/.test(result.title);
     if (recruiting && /예약\s*설정/.test(result.title) && !/매일/.test(result.title)) {
       result.handled = true;
@@ -399,7 +428,12 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       return detail.approved ? '최종 승인했어요. 보리 일정에서 확인할 수 있어요.' : '최종 반려했어요. 사유는 업무 이력에 남겼어요.';
     });
   });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void (background ? syncBackground() : check());
+  });
   restoreStatus();
-  void check();
+  if (background) {
+    void syncBackground();
+    setInterval(syncBackground, 5000);
+  } else void check();
 }

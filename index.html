@@ -174,6 +174,10 @@ header div, main { max-width: 1440px; }
 .cat-position:has([data-strolling]) { transition-duration: var(--stroll-duration); transition-timing-function: linear; }
 .desk-menu-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px; margin-top: 16px; }
 .desk-menu-actions button { width: 100%; min-height: 48px; }
+.today-work { margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.today-work article { padding: 9px; border: 1px solid #e2d9ed; border-radius: 8px; }
+.today-work h3, .today-work p { margin: 0 0 4px; }
+
 .monitor-dialog { background: #f8f5fb; border: 7px solid #383247; border-bottom-width: 17px; border-radius: 14px; box-shadow: 0 0 0 2px #756a86, 0 18px 45px #1a122d65; }
 .monitor-viewport { display: contents; }
 .monitor-dialog { padding: 0; overflow: visible; transform: translateY(-12px); }
@@ -427,6 +431,8 @@ header div, main { max-width: 1440px; }
     <h2 id="desk-menu-title">사장 자리</h2>
     <form method="dialog"><button class="secondary" autofocus>닫기</button></form>
   </div>
+  <h3>오늘 할 일</h3>
+  <section id="manager-today" class="today-work" aria-label="오늘 할 일"></section>
   <div class="desk-menu-actions">
     <button type="button" data-desk-action="work">업무진행</button>
     <button type="button" data-desk-action="break">월급루팡</button>
@@ -545,8 +551,8 @@ header div, main { max-width: 1440px; }
   </div>
 </dialog>
 <script src="office-cat.js"></script>
-<script defer src="calendar-ui.js?v=natural-schedule"></script>
-<script defer src="job-automation-core.js?v=reservation-management"></script>
+<script defer src="calendar-ui.js?v=today-work"></script>
+<script defer src="job-automation-core.js?v=today-work"></script>
 <script defer src="job-automation.js?v=review-history"></script>
 
 <script>
@@ -772,6 +778,7 @@ function interactWithManagerSpot() {
     manager.style.setProperty('--cat-y', 'calc(24% - clamp(20px, 3vw, 36px))');
     managerPose = 'resting';
     managerActivity.textContent = '';
+    renderManagerToday();
     deskMenu.showModal();
     return;
   }
@@ -1604,7 +1611,27 @@ function demoMangoResearch(task) {
     String(index + 1) + '. ' + name + '\n상황 — ' + setup + '\n2컷 포인트 — ' + payoff).join('\n\n');
 }
 
+function isApplicationPrep(task) {
+  return task.employee === 'lulu' && task.title.startsWith('자소서 준비 · ');
+}
+
+function demoApplicationPrep(task) {
+  const [posting, source] = task.title.split('\n');
+  return [
+    posting,
+    '지원 동기 — 공고의 핵심 업무 하나를 고르고, 그 업무에 관심을 갖게 된 실제 경험을 적어 주세요.',
+    '직무 경험 — 관련 경험 하나를 상황·내 역할·행동·결과 순서로 정리해 주세요.',
+    '제출 전 확인 — 자소서 문항, 분량, 필수 첨부 서류를 공고 원문과 대조해 주세요.',
+    source || ''
+  ].filter(Boolean).join('\n\n');
+}
+
 function demoStoryboard(task) {
+  if (task.title.startsWith('이 소재로 2컷 콘티 작성해줘.')) {
+    const [, idea, setup, payoff] = task.title.split('\n');
+    if (setup && payoff) return [idea, '1컷\n장면 — ' + setup.replace(/^상황 — /, ''), 
+      '2컷\n장면 — ' + payoff.replace(/^2컷 포인트 — /, '')].join('\n\n');
+  }
   const episode = task.title.match(/\d+\s*화/u)?.[0]?.replace(/\s/g, '');
   const revised = task.notes.length % 2 === 1;
   return [
@@ -1665,6 +1692,7 @@ function startNext(id, preferredTask) {
     activeRuns.delete(task);
     if (isMangoStoryboard(task)) task.output = demoStoryboard(task);
     if (isMangoMaterialResearch(task)) task.output = demoMangoResearch(task);
+    if (isApplicationPrep(task)) task.output = demoApplicationPrep(task);
     const revision = task.notes.at(-1);
     task.history.push('작업 완료 보고 ' + (task.notes.length + 1) + '차 · 데모 · ' + employees[id][2]
       + (revision ? ' 수정 요청 내용: ' + revision : ''));
@@ -1691,6 +1719,50 @@ function makeCancelButton(task, view) {
 }
 
 let pendingJobs = [];
+
+function renderManagerToday(now = Date.now()) {
+  const day = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
+  const detail = { day, events: [] };
+  window.dispatchEvent(new CustomEvent('cat-office-today-events', { detail }));
+  const upcoming = tasks.filter(task => task.status === 'scheduled' && task.scheduledAt > now);
+  const entries = upcoming.map(task => ({ time: task.scheduledAt, title: employees[task.employee][0] + ' · ' + task.title }));
+  if (jobReservation && !jobReservation.paused && Number.isFinite(jobReservation.nextAt) && jobReservation.nextAt > now)
+    entries.push({ time: jobReservation.nextAt, title: '루루 · 채용공고 조사' });
+  entries.sort((a, b) => a.time - b.time);
+  const pending = tasks.filter(task => task.status === 'review').length + pendingJobs.length;
+  const missed = tasks.filter(task => task.status === 'missed' &&
+    new Date(task.scheduledAt + 9 * 3600000).toISOString().slice(0, 10) === day).length + Number(Boolean(jobReservation?.missed));
+  const sections = [
+    ['오늘 일정', detail.events.slice(0, 4).map(item => (item.allDay ? '하루 종일' : item.start.slice(11, 16)) + ' · ' + item.title), '등록된 일정 없음'],
+    ['다음 예약', entries.slice(0, 3).map(item => formatScheduledStart(item.time) + ' · ' + item.title), '예정된 예약 없음'],
+    ['결재 대기', [pending + '건']],
+    ['놓친 업무', [missed + '건']]
+  ];
+  document.querySelector('#manager-today').replaceChildren(...sections.map(([name, values, empty]) => {
+    const card = element('article', '');
+    card.append(element('h3', name));
+    for (const value of values.length ? values : [empty]) card.append(element('p', value, 'muted'));
+    return card;
+  }));
+}
+
+function handoffButton(label, employee, title) {
+  const button = element('button', label, 'secondary');
+  button.type = 'button';
+  button.onclick = () => {
+    const dialog = button.closest('dialog');
+    if (dialog?.open) dialog.close();
+    openAssignment(employee);
+    request.value = title.slice(0, 500);
+    request.focus();
+  };
+  return button;
+}
+
+function applicationHandoff(job) {
+  return handoffButton('루루에게 자소서 준비 맡기기', 'lulu',
+    '자소서 준비 · ' + job.organization + ' · ' + job.title + (job.url ? '\n공고 원문 ' + job.url : ''));
+}
 
 function renderJobReview(job) {
   const item = element('li', '');
@@ -1720,6 +1792,7 @@ function renderJobReview(job) {
       const message = await detail.done;
       const notice = element('p', message);
       notice.setAttribute('role', 'status');
+      if (approved) notice.append(' ', applicationHandoff(job));
       pendingList.prepend(notice);
     } catch (error) {
       status.textContent = error.message;
@@ -1865,6 +1938,7 @@ function renderHistory() {
           row.append(title, element('p', '코코 · ' + (review || '검토 상세 기록 없음')));
           if (job.finalDecision) row.append(element('p', '사장 · ' + job.finalDecision + (job.finalReason ? ' · ' + job.finalReason : '')));
           if (job.calendarState) row.append(element('p', '보리 · ' + job.calendarState + ' · ' + job.deadline, 'muted'));
+          if (job.finalDecision === '최종 승인') row.append(applicationHandoff(job));
           list.append(row);
         }
         details.append(list);
@@ -1895,6 +1969,7 @@ window.addEventListener('cat-office-job-reports', event => {
     reviewToast.hidden = false;
   }
   renderHistory();
+  if (deskMenu.open) renderManagerToday();
 });
 document.querySelector('#review-toast-close').onclick = () => { reviewToast.hidden = true; };
 document.querySelector('#review-toast-open').onclick = () => {
@@ -1910,6 +1985,7 @@ let jobReservation;
 window.addEventListener('cat-office-job-reservation', event => {
   jobReservation = event.detail;
   if (selectedEmployee === 'lulu') renderWork();
+  if (deskMenu.open) renderManagerToday();
 });
 
 function renderWork() {
@@ -2048,15 +2124,17 @@ function renderTaskCard(task, view) {
     }
     if (task.output && ['review', 'done'].includes(task.status)) {
       const materials = isMangoMaterialResearch(task);
+      const application = isApplicationPrep(task);
       const demo = isMangoStoryboard(task) && !task.localStoryboard;
-      card.append(element('h4', materials ? '직장인 웹툰 소재 · 데모' : demo ? '컷별 콘티 초안 · 데모' : '컷별 콘티 초안'));
-      const cuts = materials ? task.output.split('\n\n') : task.output.split(/\n(?=\s*(?:[-*]\s+|#{1,6}\s+)?(?:\*\*)?\d+\s*컷)/u);
+      card.append(element('h4', materials ? '직장인 웹툰 소재 · 데모' : application ? '자소서 준비 메모 · 데모' : demo ? '컷별 콘티 초안 · 데모' : '컷별 콘티 초안'));
+      const cuts = materials || application ? task.output.split('\n\n') : task.output.split(/\n(?=\s*(?:[-*]\s+|#{1,6}\s+)?(?:\*\*)?\d+\s*컷)/u);
       for (const cut of cuts) {
         card.append(element('div', cut.trim().replace(/\*\*([^*\n]+)\*\*/g, '$1'), 'suni-result'));
+        if (materials && task.status === 'done') card.append(handoffButton('이 소재로 콘티 맡기기', 'mango', '이 소재로 2컷 콘티 작성해줘.\n' + cut));
       }
       if (demo) card.append(element('p', '가상 예시예요. 수정 요청은 기록하고 미리 준비한 다른 데모 초안을 보여드려요.', 'muted'));
       if (materials) card.append(element('p', '가상의 직장인 에피소드 소재예요.', 'muted'));
-      if (!materials && task.status === 'done' && navigator.clipboard) {
+      if (!materials && !application && task.status === 'done' && navigator.clipboard) {
         const copy = element('button', 'SUNI에 넣을 콘티 복사', 'secondary');
         copy.type = 'button';
         const copied = element('p', '');
@@ -2229,8 +2307,8 @@ form.onsubmit = event => {
     recurring.open?.();
     return;
   }
-  const schedule = parseScheduledTask(title);
-  if (schedule?.invalid || (!schedule && /매일|예약\s*(?:해|등록)|업무\s*시작\s*예약/.test(title))) {
+  const schedule = /^(?:자소서 준비 · |이 소재로 2컷 콘티 작성해줘\.)/.test(title) ? null : parseScheduledTask(title);
+  if (schedule?.invalid || (!schedule && !/^(?:자소서 준비 · |이 소재로 2컷 콘티 작성해줘\.)/.test(title) && /매일|예약\s*(?:해|등록)|업무\s*시작\s*예약/.test(title))) {
     request.setCustomValidity('지금보다 이후의 시작 시각을 입력해 주세요.');
     request.reportValidity();
     request.addEventListener('input', () => request.setCustomValidity(''), { once: true });
