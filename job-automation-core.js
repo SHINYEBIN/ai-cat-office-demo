@@ -3,6 +3,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   const dialog = document.querySelector('#job-automation');
   const form = document.querySelector('#job-automation-form');
   const status = document.querySelector('#job-automation-status');
+  const feedback = document.querySelector('#feedback');
   const reportList = document.querySelector('#job-automation-report');
   const pause = document.querySelector('#job-automation-pause');
   const runNow = document.querySelector('#job-automation-run');
@@ -18,7 +19,6 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   }
 
   function parseRequest(request) {
-    if (!/채용\s*공고/.test(request)) return;
     const match = request.match(/(오전|오후)?\s*(\d{1,2})\s*(?:시(?:\s*(?:(\d{1,2})\s*분|반))?|:\s*(\d{2}))/);
     if (!match) return;
     const hour = Number(match[2]);
@@ -144,13 +144,18 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           config.report = { jobs: reviews, message: day + ' · 루루 조사 ' + jobs.length +
             '건 → 코코 1차 승인 ' + approved.length + '건 · 확인 필요 ' +
             reviews.filter(job => job.outcome === '확인 필요').length + '건 → 보리 신규 등록 ' + result.registered + '건' };
+          if (!approved.length) config.report.message += ' · 승인된 공고가 없어 등록할 일정이 없어요.';
+          else if (!result.registered) config.report.message += ' · 승인된 공고는 이미 처리했어요.';
         } catch (error) {
           if (error.rateLimited) config.paused = true;
           config.report = { message: day + ' · ' + (error.name === 'TimeoutError' || error.name === 'TypeError'
             ? '공개 채용 출처에 연결하지 못했어요. 지금 조사로 다시 시도할 수 있어요.' : error.message) };
         } finally {
           running = false;
-          if (read()?.revision === config.revision) write(config);
+          if (read()?.revision === config.revision) {
+            write(config);
+            if (feedback && config.report) feedback.textContent = config.report.message;
+          }
           render(read());
         }
       });
@@ -185,14 +190,20 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
 
   window.addEventListener('cat-office-repeat-assignment', event => {
     const result = event.detail;
-    if (result.employee !== 'lulu' || !/채용\s*공고/.test(result.title)) return;
-    if (/예약\s*설정/.test(result.title) && !/매일/.test(result.title)) {
+    if (result.employee !== 'lulu') return;
+    const recruiting = /채용\s*(?:공고|정보)|구인\s*공고|채용\s*조사/.test(result.title);
+    if (recruiting && /예약\s*설정/.test(result.title) && !/매일/.test(result.title)) {
       result.handled = true;
       result.open = openSettings;
       return;
     }
     const time = parseRequest(result.title);
-    if (!time && !/매일|예약|오늘|내일|오전|오후|\d\s*시/.test(result.title)) return;
+    const wantsSchedule = time || /매일|예약|오전|오후|\d\s*시/.test(result.title);
+    if (!wantsSchedule) return;
+    if (!recruiting && !/업무|일\s*(?:해|시켜|맡겨|부탁|예약)/.test(result.title)) {
+      result.error = '루루의 예약은 채용공고 조사에 사용할 수 있어요. 업무 내용에 “채용공고 조사”를 넣어 주세요.';
+      return;
+    }
     if (!time || !navigator.locks) {
       result.error = time ? '반복 업무를 지원하는 PC용 Chrome에서 열어 주세요.'
         : '“매일 오전 9시에 채용공고 조사해줘”처럼 시작 시간을 넣어 주세요.';
