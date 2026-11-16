@@ -151,12 +151,11 @@ header div, main { max-width: 1440px; }
 .manager .office-model { width: clamp(65px, 11.5vw, 120px); }
 .manager { transition: none; pointer-events: none; }
 .manager .manager-line { position: absolute; bottom: 91%; left: 50%; transform: translateX(-50%); padding: 3px 9px; }
-.manager-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.manager-controls button { min-width: 44px; min-height: 44px; touch-action: manipulation; }
-#manager-interact[disabled], .manager-key-hint { display: none; }
+.room { touch-action: manipulation; }
+.manager-key-hint { display: none; }
 .manager-key-hint:not([hidden]) { display: block; position: absolute; z-index: 1001; bottom: 5px; left: 50%; transform: translateX(-50%); padding: 6px 10px; border-radius: 12px; background: #30223e; color: white; font-size: 12px; white-space: nowrap; }
-@media (hover: hover) and (pointer: fine) {
-  #manager-help, .manager-controls, #manager-interact { display: none; }
+@media (pointer: coarse) {
+  #manager-activity { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 .office-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .office-heading h2 { margin: 0; }
@@ -278,7 +277,7 @@ header div, main { max-width: 1440px; }
       <button type="button" id="office-refresh">새로고침</button>
     </div>
     <p class="muted">업무를 맡기면 담당 고양이가 자기 책상으로 이동합니다.</p>
-    <div class="room" id="room" tabindex="-1" role="group" aria-label="사무실" aria-describedby="manager-help">
+    <div class="room" id="room" tabindex="-1" role="group" aria-label="사무실">
       <div class="office-window" id="office-window" aria-hidden="true"><i class="sky-stars"></i><i class="sky-body"></i></div>
       <div class="office-sunlight" aria-hidden="true"></div>
       <div class="office-night-lighting" aria-hidden="true"></div>
@@ -325,14 +324,6 @@ header div, main { max-width: 1440px; }
       </div>
       <button type="button" class="manager-key-hint" id="manager-key-hint" hidden></button>
     </div>
-    <p class="muted" id="manager-help">화면의 방향 버튼으로 사장을 움직일 수 있어요.</p>
-    <div class="manager-controls" role="group" aria-label="사장 이동" aria-describedby="manager-help">
-      <button type="button" data-move="ArrowLeft" aria-label="왼쪽으로 이동">←</button>
-      <button type="button" data-move="ArrowUp" aria-label="위로 이동">↑</button>
-      <button type="button" data-move="ArrowDown" aria-label="아래로 이동">↓</button>
-      <button type="button" data-move="ArrowRight" aria-label="오른쪽으로 이동">→</button>
-    </div>
-    <button type="button" id="manager-interact" disabled>상호작용 (D)</button>
     <p class="muted" id="manager-activity" role="status">자료 선반, 커피 코너, 휴게실 가까이에서 상호작용할 수 있어요.</p>
   </section>
   <section id="staff-panel" aria-labelledby="staff-title">
@@ -535,6 +526,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js"></script>
+<script defer src="job-automation-core.js"></script>
 <script defer src="job-automation.js"></script>
 
 <script>
@@ -703,12 +695,12 @@ const managerMoves = new Map([
   ['ArrowLeft', [-1, 0]], ['ArrowUp', [0, -1]],
   ['ArrowDown', [0, 1]], ['ArrowRight', [1, 0]]
 ]);
-const managerControls = document.querySelector('.manager-controls');
 let managerWalkUntil = 0;
 let managerWalking = false;
 let managerDirection = 'right';
 const heldManagerKeys = new Set();
-const managerInteract = document.querySelector('#manager-interact');
+let touchStart;
+let touchDestination;
 const managerKeyHint = document.querySelector('#manager-key-hint');
 const managerActivity = document.querySelector('#manager-activity');
 const deskMenu = document.querySelector('#desk-menu');
@@ -745,6 +737,7 @@ function showManagerLine(lines, time) {
 
 function interactWithManagerSpot() {
   if (!nearbyManagerSpot || coffeeStartedAt !== null || reading) return;
+  touchDestination = undefined;
   managerWalkUntil = 0;
   managerLine.hidden = true;
   if (nearbyManagerSpot.pose === 'desk') {
@@ -767,7 +760,6 @@ function interactWithManagerSpot() {
   }
   if (managerPose === 'resting') showManagerLine(restLines, performance.now());
 }
-managerInteract.addEventListener('click', interactWithManagerSpot);
 managerKeyHint.addEventListener('click', interactWithManagerSpot);
 deskMenu.querySelector('.desk-menu-actions').addEventListener('click', event => {
   const action = event.target.closest('[data-desk-action]')?.dataset.deskAction;
@@ -792,7 +784,7 @@ function moveManager(dx, dy, distance = 10) {
   const nextX = Math.max(bounds.width / 2, Math.min(floor.width - bounds.width / 2, x + dx * distance));
   const nextY = Math.max(floor.height * .24 - bounds.height * (131 / 148 - .5),
     Math.min(floor.height - bounds.height / 2, y + dy * distance));
-  if (Math.abs(nextX - x) + Math.abs(nextY - y) < .01) return;
+  if (Math.abs(nextX - x) + Math.abs(nextY - y) < .01) return false;
   coffeeStartedAt = null;
   reading = undefined;
   managerLine.hidden = true;
@@ -804,11 +796,20 @@ function moveManager(dx, dy, distance = 10) {
   manager.style.setProperty('--cat-y', (nextY / floor.height * 100) + '%');
   if (dx) managerDirection = dx < 0 ? 'left' : 'right';
   managerWalkUntil = performance.now() + 170;
+  return true;
 }
 
-managerControls.addEventListener('click', event => {
-  const button = event.target.closest('button[data-move]');
-  if (button) moveManager(...managerMoves.get(button.dataset.move));
+room.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'touch' || !event.isPrimary || event.target.closest('button, a')) return;
+  touchStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+});
+room.addEventListener('pointercancel', () => { touchStart = undefined; });
+room.addEventListener('pointerup', event => {
+  const start = touchStart;
+  touchStart = undefined;
+  if (!start || start.id !== event.pointerId || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) return;
+  const floor = room.getBoundingClientRect();
+  touchDestination = { x: (event.clientX - floor.left) / floor.width, y: (event.clientY - floor.top) / floor.height };
 });
 document.addEventListener('keydown', event => {
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -819,6 +820,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!managerMoves.has(event.key)) return;
+  touchDestination = undefined;
   event.preventDefault();
   if (!event.repeat) {
     heldManagerKeys.add(event.key);
@@ -1052,6 +1054,19 @@ function animateOffice(time) {
     dy += y;
   }
   if (dx || dy) moveManager(dx, dy, elapsed * .18 / Math.hypot(dx, dy));
+  else if (touchDestination) {
+    if (document.querySelector('dialog[open]') || !room.clientWidth) touchDestination = undefined;
+    else {
+      const floor = room.getBoundingClientRect();
+      const model = managerModel.getBoundingClientRect();
+      const x = floor.left + touchDestination.x * floor.width - model.left - model.width / 2;
+      const y = floor.top + touchDestination.y * floor.height - model.top - model.height * 131 / 148;
+      const distance = Math.hypot(x, y);
+      if (distance < 2 || !moveManager(x / distance, y / distance, Math.min(distance, elapsed * .18))) {
+        touchDestination = undefined;
+      }
+    }
+  }
   const roomTop = room.getBoundingClientRect().top;
   const managerBounds = managerModel.getBoundingClientRect();
   const feetX = managerBounds.left + managerBounds.width / 2;
@@ -1079,8 +1094,6 @@ function animateOffice(time) {
   }
   if (closestSpot !== nearbyManagerSpot) {
     nearbyManagerSpot = closestSpot;
-    managerInteract.disabled = !closestSpot;
-    managerInteract.textContent = closestSpot ? closestSpot.action + ' (D)' : '상호작용 (D)';
     managerKeyHint.hidden = !closestSpot;
     managerKeyHint.textContent = closestSpot ? 'D · ' + closestSpot.action : '';
   }
