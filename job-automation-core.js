@@ -96,7 +96,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     runNow.disabled = running || Boolean(config?.paused);
     status.textContent = message || (config
       ? (config.repeat === false ? '한 번 ' : '매일 ') + config.time + ' · 서울 시간 · ' +
-        (config.paused ? '일시정지' : config.pendingRun ? '처리 중' :
+        (config.paused ? '일시정지' : config.pendingRun ? '처리 중' : config.missed ? '예약 시각 지남' :
           config.repeat === false && config.lastRun ? '실행 완료' : '예약 중') +
         (config.firstDay && !config.lastRun ? '\n첫 실행 ' + config.firstDay + ' ' + config.time : '') +
         (config.report ? '\n' + config.report.message : '') : '');
@@ -112,10 +112,25 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         const config = read();
         const now = new Date(Date.now() + 9 * 3600000).toISOString();
         const day = now.slice(0, 10);
-        if (!config || config.paused || (!manual && !config.pendingRun &&
-            ((config.firstDay && day < config.firstDay) || now.slice(11, 16) < config.time ||
-              config.lastRun === day || (config.repeat === false && config.lastRun)))) return;
+        if (!config || config.paused) return;
+        if (!manual && !config.pendingRun) {
+          if (config.missed || config.lastRun === day || (config.repeat === false && config.lastRun)) return;
+          const scheduledDay = config.repeat === false && config.firstDay ? config.firstDay : day;
+          if (config.firstDay && day < config.firstDay) return;
+          const due = Date.parse(scheduledDay + 'T' + config.time + ':00+09:00');
+          const delay = Date.now() - due;
+          if (delay < 0) return;
+          if (delay >= 60000) {
+            if (config.repeat === false) {
+              config.missed = true;
+              write(config);
+              restoreStatus();
+            }
+            return;
+          }
+        }
         running = true;
+        delete config.missed;
         config.pendingRun = true;
         write(config);
         render(config, searchMessage);
@@ -193,12 +208,13 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   function armReservation() {
     clearTimeout(reservationTimer);
     const config = read();
-    if (!config || config.paused || running || !navigator.locks ||
+    if (!config || config.paused || running || !navigator.locks || config.missed ||
         (config.repeat === false && config.lastRun && !config.pendingRun)) return;
     const now = Date.now();
     const tomorrow = new Date(now + 33 * 3600000).toISOString().slice(0, 10);
     const today = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
-    const nextDay = config.lastRun === today ? tomorrow : today;
+    const todayAt = Date.parse(today + 'T' + config.time + ':00+09:00');
+    const nextDay = config.lastRun === today || (config.repeat !== false && now - todayAt >= 60000) ? tomorrow : today;
     const day = config.firstDay > nextDay ? config.firstDay : nextDay;
     const nextAt = config.pendingRun ? now : Date.parse(day + 'T' + config.time + ':00+09:00');
     const delay = nextAt <= now ? 250 : nextAt - now;
@@ -227,6 +243,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       paused: false, revision: crypto.randomUUID() };
     delete config.lastRun;
     delete config.pendingRun;
+    delete config.missed;
     write(config);
     render(config);
     armReservation();
@@ -302,6 +319,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       if (!running) render(config);
       if (!feedback || running) return;
       feedback.textContent = config.pendingRun ? '루루의 조사 작업을 이어서 처리해요.'
+        : config.missed ? '루루 예약 시각이 지났어요. 설정에서 다시 예약하거나 지금 실행할 수 있어요.'
         : config.report?.message || (config.firstDay ? reservationMessage(config.time, config)
           : '루루 채용공고 조사 예약 · 매일 ' + config.time + ' (서울 시간)');
     } catch {

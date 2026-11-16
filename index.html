@@ -147,6 +147,9 @@ header div, main { max-width: 1440px; }
 .manager-monitor::before { content: ''; position: absolute; inset: 56% 39% -2px; border-radius: 3px 3px 0 0; background: #292b38; }
 .manager-monitor::after { content: ''; position: absolute; top: 100%; left: 50%; width: 42%; height: 5px; transform: translateX(-50%); background: #34394c; clip-path: polygon(43% 0, 57% 0, 57% 65%, 100% 65%, 100% 100%, 0 100%, 0 65%, 43% 65%); }
 .manager-mouse { position: absolute; top: 4px; left: 75%; width: clamp(6px, 1vw, 11px); height: clamp(5px, .8vw, 9px); border-radius: 50%; background: #363749; box-shadow: inset 0 2px #74788e; }
+.manager-review-files { position: absolute; z-index: 2; right: 9%; bottom: calc(100% - 8px); width: clamp(20px, 3.7vw, 35px); height: clamp(16px, 2.3vw, 23px); padding: 0; border: 1px solid #805140; border-radius: 3px; background: repeating-linear-gradient(#fbd792 0 3px, #a36d50 3px 5px, #fff1d2 5px 7px); box-shadow: 2px 2px #5b3b30; }
+.manager-review-files[hidden] { display: none; }
+.manager-review-count { position: absolute; right: -6px; top: -7px; min-width: 15px; padding: 1px 3px; border-radius: 9px; background: #6b438e; color: white; font-size: 9px; line-height: 1.3; }
 .manager-nameplate { position: absolute; z-index: 1; top: 10px; left: clamp(4px, 1vw, 12px); padding: 1px 4px; border: 1px solid #bd9150; border-radius: 2px; background: linear-gradient(#ffe4a3, #d6a256); box-shadow: 0 2px #714723; color: #3c2817; font: 700 clamp(8px, 1.2vw, 11px)/1.2 sans-serif; white-space: nowrap; }
 .manager .office-model { width: clamp(65px, 11.5vw, 120px); }
 .manager { transition: none; pointer-events: none; }
@@ -542,7 +545,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js?v=natural-schedule"></script>
-<script defer src="job-automation-core.js?v=final-approval"></script>
+<script defer src="job-automation-core.js?v=desk-inbox"></script>
 <script defer src="job-automation.js?v=review-history"></script>
 
 <script>
@@ -552,7 +555,7 @@ const employees = {
   mango: ['망고', '콘텐츠 기획 담당', 'SUNI 웹툰 기획안에 한 줄 소개, 주요 인물, 회차별 사건, 다음 화로 이어지는 장면을 정리하는 구성을 제안합니다.'],
   bori: ['보리', '일정·운영 담당', '준비, 실행, 점검 순서로 할 일 목록을 제안합니다.']
 };
-const labels = { scheduled: '예약 대기', queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
+const labels = { scheduled: '예약 대기', missed: '예약 시각 지남', queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
 const storageKey = 'cat-office-public-demo-tasks';
 let tasks = [];
 try {
@@ -693,6 +696,14 @@ for (const part of ['manager-monitor', 'manager-mouse']) {
   managerDesk.append(accessory);
 }
 managerDesk.append(element('span', '사장', 'manager-nameplate'));
+const managerReviewFiles = element('button', '', 'manager-review-files');
+managerReviewFiles.type = 'button';
+managerReviewFiles.hidden = true;
+managerReviewFiles.setAttribute('aria-haspopup', 'dialog');
+const managerReviewCount = element('span', '', 'manager-review-count');
+managerReviewFiles.append(managerReviewCount);
+managerReviewFiles.onclick = () => openPending(true);
+managerDesk.append(managerReviewFiles);
 const manager = element('div', '', 'office-cat manager');
 const managerModel = element('canvas', '', 'office-model');
 managerModel.width = 128;
@@ -1705,6 +1716,10 @@ function renderJobReview(job) {
 function renderPending() {
   const pending = tasks.filter(task => ['scheduled', 'queued', 'running', 'review'].includes(task.status));
   document.querySelector('#whiteboard-count').textContent = pending.length + pendingJobs.length + '건';
+  const reviewCount = pending.filter(task => task.status === 'review').length + pendingJobs.length;
+  managerReviewFiles.hidden = reviewCount === 0;
+  managerReviewFiles.setAttribute('aria-label', '결재 대기 서류 ' + reviewCount + '건');
+  managerReviewCount.textContent = reviewCount;
   const visible = pendingReviewsOnly ? pending.filter(task => task.status === 'review') : pending;
   if (visible.length || pendingJobs.length) {
     const list = element('ul', '');
@@ -2051,15 +2066,17 @@ function startScheduledTasks() {
     .sort((a, b) => a.scheduledAt - b.scheduledAt);
   if (!due.length) { armScheduledTasks(); return; }
   for (const task of due) {
-    task.status = 'queued';
-    task.history.push('예약 시각이 되어 업무를 시작 대기열에 넣었습니다.');
+    const onTime = now - task.scheduledAt < 60000;
+    task.status = onTime ? 'queued' : 'missed';
+    task.history.push(onTime ? '예약 시각이 되어 업무를 시작 대기열에 넣었습니다.'
+      : '예약 시각에 실행하지 못했습니다.');
     if (task.repeat) {
       const dayMs = 86400000;
       const scheduledAt = task.scheduledAt + (Math.floor((now - task.scheduledAt) / dayMs) + 1) * dayMs;
       tasks.push({ title: task.title, employee: task.employee, suniManual: task.suniManual,
         createdAt: now, status: 'scheduled', scheduledAt, repeat: true, notes: [], history: ['매일 업무를 예약했습니다.'] });
     }
-    startNext(task.employee);
+    if (onTime) startNext(task.employee);
   }
   render();
 }
@@ -2087,7 +2104,7 @@ form.onsubmit = event => {
     return;
   }
   const schedule = parseScheduledTask(title);
-  if (schedule?.invalid) {
+  if (schedule?.invalid || (!schedule && /매일|예약\s*(?:해|등록)|업무\s*시작\s*예약/.test(title))) {
     request.setCustomValidity('지금보다 이후의 시작 시각을 입력해 주세요.');
     request.reportValidity();
     request.addEventListener('input', () => request.setCustomValidity(''), { once: true });
