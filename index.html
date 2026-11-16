@@ -526,7 +526,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js"></script>
-<script defer src="job-automation-core.js?v=resume-reservation"></script>
+<script defer src="job-automation-core.js?v=timed-work"></script>
 <script defer src="job-automation.js?v=show-desk-workflow"></script>
 
 <script>
@@ -536,7 +536,7 @@ const employees = {
   mango: ['망고', '콘텐츠 기획 담당', 'SUNI 웹툰 기획안에 한 줄 소개, 주요 인물, 회차별 사건, 다음 화로 이어지는 장면을 정리하는 구성을 제안합니다.'],
   bori: ['보리', '일정·운영 담당', '준비, 실행, 점검 순서로 할 일 목록을 제안합니다.']
 };
-const labels = { queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
+const labels = { scheduled: '예약 대기', queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
 const storageKey = 'cat-office-public-demo-tasks';
 let tasks = [];
 try {
@@ -1626,7 +1626,7 @@ function startNext(id, preferredTask) {
 function makeCancelButton(task, view) {
   const button = element('button', '작업 취소', 'secondary');
   button.onclick = () => {
-    if (!['queued', 'running', 'review'].includes(task.status)) return;
+    if (!['scheduled', 'queued', 'running', 'review'].includes(task.status)) return;
     task.status = 'cancelled';
     activeRuns.get(task)?.();
     activeRuns.delete(task);
@@ -1640,7 +1640,7 @@ function makeCancelButton(task, view) {
 }
 
 function renderPending() {
-  const pending = tasks.filter(task => ['queued', 'running', 'review'].includes(task.status));
+  const pending = tasks.filter(task => ['scheduled', 'queued', 'running', 'review'].includes(task.status));
   document.querySelector('#whiteboard-count').textContent = pending.length + '건';
   const visible = pendingReviewsOnly ? pending.filter(task => task.status === 'review') : pending;
   if (visible.length) {
@@ -1669,6 +1669,7 @@ function render() {
       task.output = demoStoryboard(task);
     }
   }
+  armScheduledTasks();
   clearDemoTasks.hidden = !tasks.length;
   if (reviewDialog.open) {
     if (reviewTask?.status === 'review') reviewReport.replaceChildren(renderTaskCard(reviewTask, 'review'));
@@ -1697,7 +1698,7 @@ function render() {
       : tasks.find(task => task.employee === id && ['running', 'review'].includes(task.status));
     updateOffice(id, activeTask || null);
     const states = tasks.filter(task => task.employee === id).map(task => task.status);
-    const status = activeTask?.status || (states.includes('queued') ? 'queued' : undefined);
+    const status = activeTask?.status || ['queued', 'scheduled'].find(state => states.includes(state));
     const details = element('span', '');
     details.append(element('strong', name), element('span', role, 'muted'),
       element('span', status === 'running' ? runningTaskLabel(activeTask) : labels[status] || '휴식 중', 'badge'));
@@ -1724,7 +1725,7 @@ function renderWork() {
     button.setAttribute('aria-pressed', selected);
   }
   const owned = tasks.filter(task => task.employee === selectedEmployee);
-  const active = owned.filter(task => ['queued', 'running', 'review'].includes(task.status) || task.generationError
+  const active = owned.filter(task => ['scheduled', 'queued', 'running', 'review'].includes(task.status) || task.generationError
     || (task.output && task.status === 'done'));
   const remaining = document.querySelector('#employee-work');
   remaining.replaceChildren(...active.map(task => renderTaskCard(task, 'work')));
@@ -1757,6 +1758,7 @@ function renderTaskCard(task, view) {
       card.append(history);
       if (task.createdAt) card.append(element('p', '배정일 ' + taskDate.format(task.createdAt), 'muted'));
     }
+    if (task.scheduledAt) card.append(element('p', '예약 시작 ' + formatScheduledStart(task.scheduledAt), 'muted'));
     if (task.generationError && task.status === 'failed') {
       card.append(element('p', task.generationError, 'muted'));
       const retry = element('button', '콘티 작성 다시 시도');
@@ -1826,7 +1828,7 @@ function renderTaskCard(task, view) {
       actions.append(makeCancelButton(task, view));
       card.append(actions);
     }
-    if (view !== 'pending' && ['queued', 'running'].includes(task.status)) {
+    if (view !== 'pending' && ['scheduled', 'queued', 'running'].includes(task.status)) {
       card.append(makeCancelButton(task, view));
     }
     if (task.status === 'review' && (view !== 'work' || task.suniManual || isMangoStoryboard(task))) {
@@ -1874,6 +1876,57 @@ function renderTaskCard(task, view) {
     return card;
 }
 
+let scheduledTaskTimer;
+const scheduledStartFormat = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul', dateStyle: 'short', timeStyle: 'medium', hour12: false
+});
+const formatScheduledStart = value => scheduledStartFormat.format(value) + ' (서울 시간)';
+
+function parseScheduledTask(title, now = Date.now()) {
+  const match = /(?:(오늘|내일)\s*)?(?:(오전|오후)\s*)?(\d{1,2})\s*(?:시(?:\s*(?:(\d{1,2})\s*분|반))?|:\s*(\d{2}))(?:\s*에)?/.exec(title);
+  if (!match || (match.index > 0 && !/^(?:매일|업무\s*시작|예약)\s*$/.test(title.slice(0, match.index).trim()) && !/업무\s*시작|예약/.test(title))) return null;
+  const [, day, period, rawHour, koreanMinute, clockMinute] = match;
+  const hour = Number(rawHour);
+  const minute = Number(koreanMinute || clockMinute || (match[0].includes('반') ? 30 : 0));
+  if (hour > 23 || minute > 59 || (period && (hour < 1 || hour > 12))) return { invalid: true };
+  const dayMs = 86400000;
+  const offset = 9 * 3600000;
+  const midnight = Math.floor((now + offset) / dayMs) * dayMs - offset;
+  const hours = period ? [hour % 12 + (period === '오후' ? 12 : 0)]
+    : hour >= 1 && hour <= 12 && !clockMinute ? [hour % 12, hour % 12 + 12] : [hour];
+  const candidates = hours.map(value => midnight + (day === '내일' ? dayMs : 0) + (value * 60 + minute) * 60000);
+  const scheduledAt = candidates.find(value => value > now) ?? (day === '오늘' ? null : candidates[0] + dayMs);
+  return scheduledAt === null ? { invalid: true } : { scheduledAt, repeat: /매일/.test(title) };
+}
+
+function armScheduledTasks() {
+  clearTimeout(scheduledTaskTimer);
+  const waiting = tasks.filter(task => task.status === 'scheduled');
+  if (!waiting.length) return;
+  const next = Math.min(...waiting.map(task => task.scheduledAt));
+  scheduledTaskTimer = setTimeout(startScheduledTasks, Math.min(Math.max(0, next - Date.now()), 2147483647));
+}
+
+function startScheduledTasks() {
+  const now = Date.now();
+  const due = tasks.filter(task => task.status === 'scheduled' && task.scheduledAt <= now)
+    .sort((a, b) => a.scheduledAt - b.scheduledAt);
+  if (!due.length) { armScheduledTasks(); return; }
+  for (const task of due) {
+    task.status = 'queued';
+    task.history.push('예약 시각이 되어 업무를 시작 대기열에 넣었습니다.');
+    if (task.repeat) {
+      const dayMs = 86400000;
+      const scheduledAt = task.scheduledAt + (Math.floor((now - task.scheduledAt) / dayMs) + 1) * dayMs;
+      tasks.push({ title: task.title, employee: task.employee, suniManual: task.suniManual,
+        createdAt: now, status: 'scheduled', scheduledAt, repeat: true, notes: [], history: ['매일 업무를 예약했습니다.'] });
+    }
+    startNext(task.employee);
+  }
+  render();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) startScheduledTasks(); });
+
 form.onsubmit = event => {
   event.preventDefault();
   const title = request.value.trim();
@@ -1895,13 +1948,21 @@ form.onsubmit = event => {
     recurring.open?.();
     return;
   }
+  const schedule = parseScheduledTask(title);
+  if (schedule?.invalid) {
+    request.setCustomValidity('지금보다 이후의 시작 시각을 입력해 주세요.');
+    request.reportValidity();
+    request.addEventListener('input', () => request.setCustomValidity(''), { once: true });
+    return;
+  }
   const suniManual = false;
-  tasks.push({ title, employee: id, suniManual, createdAt: Date.now(), status: 'queued', notes: [], history: [
-    suniManual ? 'SUNI 채팅에서 업무를 실행한 뒤 업무 탭에서 답변을 등록해 주세요.' : '업무를 접수했습니다.'
+  tasks.push({ title, employee: id, suniManual, createdAt: Date.now(), status: schedule ? 'scheduled' : 'queued', ...schedule, notes: [], history: [
+    schedule ? '업무 시작을 예약했습니다.' : suniManual ? 'SUNI 채팅에서 업무를 실행한 뒤 업무 탭에서 답변을 등록해 주세요.' : '업무를 접수했습니다.'
   ] });
   request.value = '';
-  feedback.textContent = employees[id][0] + '에게 업무를 맡겼습니다.';
-  startNext(id);
+  feedback.textContent = schedule ? employees[id][0] + ' 업무 시작 ' + formatScheduledStart(schedule.scheduledAt)
+    : employees[id][0] + '에게 업무를 맡겼습니다.';
+  if (!schedule) startNext(id);
   render();
   assignDialog.close();
 };

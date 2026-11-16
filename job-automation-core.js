@@ -9,6 +9,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   const runNow = document.querySelector('#job-automation-run');
   const submit = form.querySelector('button[type=submit]');
   let running = false;
+  let reservationTimer;
 
   function read() {
     return JSON.parse(localStorage.getItem(key) || 'null');
@@ -24,7 +25,14 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     const hour = Number(match[2]);
     const minute = Number(match[3] || match[4] || (match[0].includes('반') ? 30 : 0));
     if (minute > 59 || hour > 23 || (match[1] && (hour < 1 || hour > 12))) return;
-    const clockHour = match[1] ? hour % 12 + (match[1] === '오후' ? 12 : 0) : hour;
+    let clockHour = match[1] ? hour % 12 + (match[1] === '오후' ? 12 : 0) : hour;
+    if (!match[1] && !match[4] && hour >= 1 && hour <= 12 && !/내일/.test(request)) {
+      const seoul = new Date(Date.now() + 9 * 3600000);
+      const minuteOfDay = seoul.getUTCHours() * 60 + seoul.getUTCMinutes();
+      const morning = hour % 12;
+      clockHour = minuteOfDay >= morning * 60 + minute && minuteOfDay < (morning + 12) * 60 + minute
+        ? morning + 12 : morning;
+    }
     return [clockHour, minute].map(value => String(value).padStart(2, '0')).join(':');
   }
 
@@ -171,7 +179,24 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     } catch {
       running = false;
       render(null, '이 브라우저에서 반복 업무 상태를 저장하지 못했어요.');
+    } finally {
+      armReservation();
     }
+  }
+
+  function armReservation() {
+    clearTimeout(reservationTimer);
+    const config = read();
+    if (!config || config.paused || running || !navigator.locks ||
+        (config.repeat === false && config.lastRun && !config.pendingRun)) return;
+    const now = Date.now();
+    const tomorrow = new Date(now + 33 * 3600000).toISOString().slice(0, 10);
+    const today = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
+    const nextDay = config.lastRun === today ? tomorrow : today;
+    const day = config.firstDay > nextDay ? config.firstDay : nextDay;
+    const nextAt = config.pendingRun ? now : Date.parse(day + 'T' + config.time + ':00+09:00');
+    const delay = nextAt <= now ? 250 : nextAt - now;
+    reservationTimer = setTimeout(check, Math.min(delay, 2147483647));
   }
 
   function openSettings() {
@@ -195,6 +220,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     delete config.pendingRun;
     write(config);
     render(config);
+    armReservation();
     return config;
   }
 
@@ -252,11 +278,12 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     config.revision = crypto.randomUUID();
     write(config);
     render(config);
+    armReservation();
     if (!config.paused) void check();
   };
   runNow.onclick = () => void check(true);
   window.addEventListener('storage', event => {
-    if (event.key === key) restoreStatus();
+    if (event.key === key) { restoreStatus(); armReservation(); }
   });
   function restoreStatus() {
     try {
@@ -272,7 +299,6 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     }
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); });
-  setInterval(check, 15000);
   restoreStatus();
   void check();
 }
