@@ -17,6 +17,6 @@
     defaultProfile: { education: '2', experience: '2' },
     searchMessage: '루루가 가상 채용공고를 확인하고 있어요.',
     reviewMessage: '코코가 가상 공고의 응시자격을 확인하고 있어요.',
-    reservationMessage: time => '루루에게 매일 ' + time + ' 가상 공고 조사를 예약했어요. ‘채용공고 예약 설정’에서 지금 실행할 수 있어요.'
+    reservationMessage: (time, config) => '루루 가상 공고 조사 첫 실행을 ' + config.firstDay + ' ' + time + '로 예약했어요. ‘채용공고 예약 설정’에서 지금 실행할 수 있어요.'
   });
 })();

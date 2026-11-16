@@ -18,7 +18,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   }
 
   function parseRequest(request) {
-    if (!/매일/.test(request) || !/채용\s*공고/.test(request)) return;
+    if (!/채용\s*공고/.test(request)) return;
     const match = request.match(/(오전|오후)?\s*(\d{1,2})\s*(?:시(?:\s*(?:(\d{1,2})\s*분|반))?|:\s*(\d{2}))/);
     if (!match) return;
     const hour = Number(match[2]);
@@ -26,6 +26,15 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     if (minute > 59 || hour > 23 || (match[1] && (hour < 1 || hour > 12))) return;
     const clockHour = match[1] ? hour % 12 + (match[1] === '오후' ? 12 : 0) : hour;
     return [clockHour, minute].map(value => String(value).padStart(2, '0')).join(':');
+  }
+
+  function reservationStart(request, time, now = Date.now()) {
+    const seoul = now + 9 * 3600000;
+    const current = new Date(seoul).toISOString();
+    const today = current.slice(0, 10);
+    const passed = time <= current.slice(11, 16);
+    if (passed && /오늘/.test(request) && !/매일|내일/.test(request)) return;
+    return /내일/.test(request) || passed ? new Date(seoul + 86400000).toISOString().slice(0, 10) : today;
   }
 
   function matches(job, terms) {
@@ -55,7 +64,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     if (!lines.length || unresolved.length) return {
       outcome: '확인 필요', reason: unresolved.join(' / ').slice(0, 180) || '비교할 요건이 없어요.'
     };
-    return { outcome: '조건 확인', reason: '원문에서 확인한 학력·경력 조건을 충족해요.' };
+    return { outcome: '1차 승인', reason: '공고에서 확인한 학력·경력 조건을 충족해요.' };
   }
 
   function render(config, message) {
@@ -64,7 +73,9 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     submit.disabled = pause.disabled = running;
     runNow.disabled = running || Boolean(config?.paused);
     status.textContent = message || (config
-      ? '매일 ' + config.time + ' · 서울 시간 · ' + (config.paused ? '일시정지' : '예약 중') +
+      ? (config.repeat === false ? '한 번 ' : '매일 ') + config.time + ' · 서울 시간 · ' +
+        (config.paused ? '일시정지' : config.repeat === false && config.lastRun ? '실행 완료' : '예약 중') +
+        (config.firstDay && !config.lastRun ? '\n첫 실행 ' + config.firstDay + ' ' + config.time : '') +
         (config.report ? '\n' + config.report.message : '') : '');
     status.style.whiteSpace = 'pre-line';
     reportList.replaceChildren();
@@ -97,7 +108,8 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         const now = new Date(Date.now() + 9 * 3600000).toISOString();
         const day = now.slice(0, 10);
         if (!config || config.paused || (!manual &&
-            (now.slice(11, 16) < config.time || config.lastRun === day))) return;
+            ((config.firstDay && day < config.firstDay) || now.slice(11, 16) < config.time ||
+              config.lastRun === day || (config.repeat === false && config.lastRun)))) return;
         running = true;
         config.lastRun = day;
         write(config);
@@ -121,16 +133,16 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
             reviews.push({ ...job, ...outcome });
           }
           if (read()?.revision !== config.revision) return;
-          const reviewed = reviews.filter(job => job.outcome === '조건 확인');
+          const approved = reviews.filter(job => job.outcome === '1차 승인');
           const registered = new Set(config.registered);
-          const additions = reviewed.filter(job => !registered.has(job.id));
+          const additions = approved.filter(job => !registered.has(job.id));
           const result = {};
           window.dispatchEvent(new CustomEvent('cat-office-register-job-deadlines', { detail: { jobs: additions, result } }));
           if (result.registered === undefined) throw new Error('보리가 일정을 저장하지 못했어요.');
           for (const job of additions) registered.add(job.id);
           config.registered = [...registered];
           config.report = { jobs: reviews, message: day + ' · 루루 조사 ' + jobs.length +
-            '건 → 코코 조건 확인 ' + reviewed.length + '건 · 확인 필요 ' +
+            '건 → 코코 1차 승인 ' + approved.length + '건 · 확인 필요 ' +
             reviews.filter(job => job.outcome === '확인 필요').length + '건 → 보리 신규 등록 ' + result.registered + '건' };
         } catch (error) {
           if (error.rateLimited) config.paused = true;
@@ -160,13 +172,15 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
 
   function saveReservation(request, time, terms, profile) {
     const previous = read();
-    const config = { ...previous, request, time, terms, profile: profile ?? previous?.profile ?? defaultProfile,
-      paused: false, revision: crypto.randomUUID() };
-    if (profile && (JSON.stringify(previous?.profile) !== JSON.stringify(profile) ||
-        JSON.stringify(previous?.terms) !== JSON.stringify(terms))) delete config.lastRun;
+    const firstDay = reservationStart(request, time);
+    if (!firstDay) return;
+    const repeat = /매일/.test(request);
+    const config = { ...previous, request, time, terms, firstDay, repeat,
+      profile: profile ?? previous?.profile ?? defaultProfile, paused: false, revision: crypto.randomUUID() };
+    delete config.lastRun;
     write(config);
     render(config);
-    void check();
+    return config;
   }
 
   window.addEventListener('cat-office-repeat-assignment', event => {
@@ -177,17 +191,21 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       result.open = openSettings;
       return;
     }
-    if (!/매일/.test(result.title)) return;
     const time = parseRequest(result.title);
+    if (!time && !/매일|예약|오늘|내일|오전|오후|\d\s*시/.test(result.title)) return;
     if (!time || !navigator.locks) {
       result.error = time ? '반복 업무를 지원하는 PC용 Chrome에서 열어 주세요.'
         : '“매일 오전 9시에 채용공고 조사해줘”처럼 시작 시간을 넣어 주세요.';
       return;
     }
     try {
-      saveReservation(result.title, time, read()?.terms || []);
+      const config = saveReservation(result.title, time, read()?.terms || []);
+      if (!config) {
+        result.error = '오늘의 해당 시각이 지났어요. 내일 또는 이후 시각을 입력해 주세요.';
+        return;
+      }
       result.handled = true;
-      result.message = reservationMessage(time);
+      result.message = reservationMessage(time, config);
     } catch {
       result.error = '반복 업무 예약을 저장하지 못했어요.';
     }
@@ -201,10 +219,11 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       return;
     }
     const terms = form.elements.keywords.value.toLowerCase().split(',').map(term => term.trim()).filter(Boolean);
-    saveReservation(request, time, terms, {
+    const config = saveReservation(request, time, terms, {
       education: form.elements.education.value,
       experience: form.elements.experience.value
     });
+    if (!config) status.textContent = '오늘의 해당 시각이 지났어요. 내일 또는 이후 시각을 입력해 주세요.';
   };
   pause.onclick = () => {
     const config = read();
