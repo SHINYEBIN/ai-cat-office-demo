@@ -526,8 +526,8 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js"></script>
-<script defer src="job-automation-core.js?v=scheduled-handoff"></script>
-<script defer src="job-automation.js"></script>
+<script defer src="job-automation-core.js?v=desk-workflow"></script>
+<script defer src="job-automation.js?v=desk-workflow"></script>
 
 <script>
 const employees = {
@@ -1235,7 +1235,7 @@ function updateOffice(id, task) {
   };
   walkToSeat(() => {
     workAtDesk();
-    if (!isResearchTask(task.title)) return;
+    if (task.automationLabel || !isResearchTask(task.title)) return;
     cat.restTimer = setTimeout(() => {
       cat.desk.dataset.active = 'false';
       cat.marker.dataset.motion = 'walking';
@@ -1570,7 +1570,7 @@ function demoStoryboard(task) {
 }
 
 function runningTaskLabel(task) {
-  return isMangoStoryboard(task) ? '콘티 작성' : summarizeTask(task.title);
+  return task.automationLabel || (isMangoStoryboard(task) ? '콘티 작성' : summarizeTask(task.title));
 }
 
 function summarizeTask(title) {
@@ -1656,6 +1656,13 @@ function renderPending() {
   }
 }
 
+let automationPhase;
+window.addEventListener('cat-office-automation-phase', event => {
+  const { employee, label } = event.detail;
+  automationPhase = employee ? { employee, title: label, status: 'running', automationLabel: label } : undefined;
+  render();
+});
+
 function render() {
   for (const task of tasks) {
     if (!task.output && ['review', 'done'].includes(task.status) && isMangoStoryboard(task)) {
@@ -1686,10 +1693,11 @@ function render() {
       assignWork();
     };
     const portrait = makePortrait(id);
-    const activeTask = tasks.find(task => task.employee === id && ['running', 'review'].includes(task.status));
+    const activeTask = tasks.find(task => task.employee === id && ['running', 'review'].includes(task.status))
+      || (automationPhase?.employee === id ? automationPhase : null);
     updateOffice(id, activeTask || null);
     const states = tasks.filter(task => task.employee === id).map(task => task.status);
-    const status = ['running', 'review', 'queued'].find(state => states.includes(state));
+    const status = activeTask?.status || (states.includes('queued') ? 'queued' : undefined);
     const details = element('span', '');
     details.append(element('strong', name), element('span', role, 'muted'),
       element('span', status === 'running' ? runningTaskLabel(activeTask) : labels[status] || '휴식 중', 'badge'));

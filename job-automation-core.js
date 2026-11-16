@@ -1,5 +1,5 @@
 // Shared by the PC office and the static public demo.
-function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, searchMessage, reviewMessage, reservationMessage }) {
+function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, searchMessage, reviewMessage, reservationMessage, showPhase }) {
   const dialog = document.querySelector('#job-automation');
   const form = document.querySelector('#job-automation-form');
   const status = document.querySelector('#job-automation-status');
@@ -115,10 +115,11 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         write(config);
         render(config, searchMessage);
         try {
-          const jobs = await listJobs(day);
+          const [jobs] = await Promise.all([listJobs(day), showPhase?.('lulu', '채용공고 조사')]);
           const shortlist = jobs.filter(job => job.deadline >= day && matches(job, config.terms))
             .sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 5);
           render(config, reviewMessage);
+          const reviewDisplay = shortlist.length ? showPhase?.('coco', '채용공고 검토') : undefined;
           const reviews = [];
           for (const job of shortlist) {
             if (read()?.revision !== config.revision) return;
@@ -132,10 +133,13 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
             }
             reviews.push({ ...job, ...outcome });
           }
+          await reviewDisplay;
           if (read()?.revision !== config.revision) return;
           const approved = reviews.filter(job => job.outcome === '1차 승인');
           const registered = new Set(config.registered);
           const additions = approved.filter(job => !registered.has(job.id));
+          if (additions.length && showPhase) await showPhase('bori', '마감 일정 등록');
+          if (read()?.revision !== config.revision) return;
           const result = {};
           window.dispatchEvent(new CustomEvent('cat-office-register-job-deadlines', { detail: { jobs: additions, result } }));
           if (result.registered === undefined) throw new Error('보리가 일정을 저장하지 못했어요.');
@@ -152,6 +156,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
             ? '공개 채용 출처에 연결하지 못했어요. 지금 조사로 다시 시도할 수 있어요.' : error.message) };
         } finally {
           running = false;
+          showPhase?.();
           if (read()?.revision === config.revision) {
             write(config);
             if (feedback && config.report) feedback.textContent = config.report.message;

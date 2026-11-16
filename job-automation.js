@@ -14,6 +14,10 @@
     key: 'cat-office-public-demo-job-automation',
     listJobs: demoListings,
     readRequirements: job => job.requirements,
+    showPhase(employee, label) {
+      window.dispatchEvent(new CustomEvent('cat-office-automation-phase', { detail: { employee, label } }));
+      if (employee) return new Promise(resolve => setTimeout(resolve, 2400));
+    },
     defaultProfile: { education: '2', experience: '2' },
     searchMessage: '루루가 가상 채용공고를 확인하고 있어요.',
     reviewMessage: '코코가 가상 공고의 응시자격을 확인하고 있어요.',
