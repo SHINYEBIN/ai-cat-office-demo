@@ -1581,6 +1581,30 @@ async function runMangoStoryboard(task) {
   }
 }
 
+function isMangoMaterialResearch(task) {
+  return task.employee === 'mango' && !task.suniManual && !task.ai && !isMangoStoryboard(task)
+    && /소재|에피소드|직장인|웹툰.{0,18}조사/.test(task.title);
+}
+
+function demoMangoResearch(task) {
+  const ideas = [
+    ['퇴근 1분 전', '18시를 기다리는데 팀장이 “잠깐만” 하고 말을 건다.', '가방을 멘 직원에게 팀장이 “엘리베이터 같이 타자”라고 한다.'],
+    ['회의실 선점', '회의실이 꽉 차 커피 코너에서 딱 5분만 회의하기로 한다.', '지나가던 직원 모두가 의견을 보태고 결국 전사 회의가 된다.'],
+    ['단톡방의 추천', '점심 메뉴를 자유롭게 고르자며 투표를 연다.', '모두가 자유롭게 고른 결과는 어제와 똑같은 제육이다.'],
+    ['최종 파일', '파일명이 “최종_진짜최종”까지 늘어난다.', '결재가 끝나자 원본을 찾는데 아무도 어떤 파일인지 모른다.'],
+    ['의문의 칭찬', '상사가 문서를 보고 “아주 과감하네요”라고 한다.', '직원은 속으로 기뻐하다가 빈 템플릿을 보냈다는 걸 알아챈다.'],
+    ['답장 타이밍', '새 메시지가 뜨자 업무 요청인 줄 알고 바로 답장할지 고민한다.', '고민하는 동안 상대가 “커피?”를 한 번 더 보낸다.'],
+    ['자동 저장', '완벽하게 작업을 마친 순간 화면이 꺼진다.', '전원은 멀쩡했고 동료가 모니터 뒷면을 닦다가 버튼을 눌렀다.'],
+    ['포스트잇의 주인', '모니터에 붙은 “오늘 꼭 말할 것” 메모 때문에 긴장한다.', '신입이 주인인데, 말하려던 건 모두에게 과자를 돌리는 일이었다.'],
+    ['연차 첫날', '연차를 쓴 동료가 단톡방에서 가장 빠르게 답한다.', '모두가 채팅을 닫고 휴대폰에 “쉬세요”를 한꺼번에 보낸다.'],
+    ['마지막 커피', '커피포트의 마지막 한 잔을 누구도 가져가지 않는다.', '누가 새로 내릴지 피해 다니다가 모두 동시에 물을 끓인다.']
+  ];
+  const requested = Number(task.title.match(/(\d+)\s*(?:건|개|가지)/u)?.[1] || 5);
+  const count = Math.min(ideas.length, Math.max(1, requested));
+  return ideas.slice(0, count).map(([name, setup, payoff], index) =>
+    String(index + 1) + '. ' + name + '\n상황 — ' + setup + '\n2컷 포인트 — ' + payoff).join('\n\n');
+}
+
 function demoStoryboard(task) {
   const episode = task.title.match(/\d+\s*화/u)?.[0]?.replace(/\s/g, '');
   const revised = task.notes.length % 2 === 1;
@@ -1597,7 +1621,7 @@ function demoStoryboard(task) {
 }
 
 function runningTaskLabel(task) {
-  return task.automationLabel || (isMangoStoryboard(task) ? '콘티 작성' : summarizeTask(task.title));
+  return task.automationLabel || (isMangoMaterialResearch(task) ? '소재 조사' : isMangoStoryboard(task) ? '콘티 작성' : summarizeTask(task.title));
 }
 
 function summarizeTask(title) {
@@ -1641,6 +1665,7 @@ function startNext(id, preferredTask) {
   const timer = setTimeout(() => {
     activeRuns.delete(task);
     if (isMangoStoryboard(task)) task.output = demoStoryboard(task);
+    if (isMangoMaterialResearch(task)) task.output = demoMangoResearch(task);
     const revision = task.notes.at(-1);
     task.history.push('작업 완료 보고 ' + (task.notes.length + 1) + '차 · 데모 · ' + employees[id][2]
       + (revision ? ' 수정 요청 내용: ' + revision : ''));
@@ -1753,6 +1778,9 @@ function render() {
     }
   }
   armScheduledTasks();
+  for (const task of tasks) {
+    if (!task.output && ['review', 'done'].includes(task.status) && isMangoMaterialResearch(task)) task.output = demoMangoResearch(task);
+  }
   clearDemoTasks.hidden = !tasks.length;
   if (reviewDialog.open) {
     if (reviewTask?.status === 'review') reviewReport.replaceChildren(renderTaskCard(reviewTask, 'review'));
@@ -1923,14 +1951,16 @@ function renderTaskCard(task, view) {
       card.append(retry);
     }
     if (task.output && ['review', 'done'].includes(task.status)) {
+      const materials = isMangoMaterialResearch(task);
       const demo = isMangoStoryboard(task) && !task.localStoryboard;
-      card.append(element('h4', demo ? '컷별 콘티 초안 · 데모' : '컷별 콘티 초안'));
-      const cuts = task.output.split(/\n(?=\s*(?:[-*]\s+|#{1,6}\s+)?(?:\*\*)?\d+\s*컷)/u);
+      card.append(element('h4', materials ? '직장인 웹툰 소재 · 데모' : demo ? '컷별 콘티 초안 · 데모' : '컷별 콘티 초안'));
+      const cuts = materials ? task.output.split('\n\n') : task.output.split(/\n(?=\s*(?:[-*]\s+|#{1,6}\s+)?(?:\*\*)?\d+\s*컷)/u);
       for (const cut of cuts) {
         card.append(element('div', cut.trim().replace(/\*\*([^*\n]+)\*\*/g, '$1'), 'suni-result'));
       }
       if (demo) card.append(element('p', '가상 예시예요. 수정 요청은 기록하고 미리 준비한 다른 데모 초안을 보여드려요.', 'muted'));
-      if (task.status === 'done' && navigator.clipboard) {
+      if (materials) card.append(element('p', '가상의 직장인 에피소드 소재예요.', 'muted'));
+      if (!materials && task.status === 'done' && navigator.clipboard) {
         const copy = element('button', 'SUNI에 넣을 콘티 복사', 'secondary');
         copy.type = 'button';
         const copied = element('p', '');
@@ -1983,7 +2013,7 @@ function renderTaskCard(task, view) {
     if (view !== 'pending' && ['scheduled', 'queued', 'running'].includes(task.status)) {
       card.append(makeCancelButton(task, view));
     }
-    if (task.status === 'review' && (view !== 'work' || task.suniManual || isMangoStoryboard(task))) {
+    if (task.status === 'review' && (view !== 'work' || task.suniManual || isMangoStoryboard(task) || isMangoMaterialResearch(task))) {
       const actions = element('div', '', 'actions');
       const approve = element('button', '승인');
       approve.onclick = () => {
