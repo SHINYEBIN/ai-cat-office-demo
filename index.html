@@ -119,6 +119,8 @@ header div, main { max-width: 1440px; }
 .coffee-machine::after { content: ''; position: absolute; bottom: 14%; left: 39%; width: 26%; height: 23%; background: #fff1df; border-radius: 1px 1px 4px 4px; }
 .coffee-cup { position: absolute; bottom: calc(100% + 2px); right: 12%; width: 9px; height: 10px; border-radius: 2px 2px 4px 4px; background: #fff1df; box-shadow: 0 1px 2px #61463170; }
 .coffee-cup::after { content: ''; position: absolute; left: 85%; top: 2px; width: 4px; height: 4px; border: 1px solid #fff1df; border-radius: 50%; }
+.coffee-spill { position: absolute; width: clamp(20px, 4vw, 38px); height: 9px; transform: translate(-50%, -50%) rotate(-8deg); border-radius: 48% 60% 45% 55%; background: radial-gradient(ellipse at 36% 35%, #d19361 0 14%, #9a5c39 35%, #71442e 81%); box-shadow: 2px 2px #5c362744; pointer-events: none; }
+.cat-position > .office-event-caption { width: max-content; max-width: 112px; white-space: normal; text-align: center; }
 .lounge-zone { left: 37%; background: radial-gradient(ellipse, #bf8e7a 54%, #78556c 57%, #9f7480 64%, transparent 66%); box-shadow: none; color: #fff4e6; }
 .lounge-chair { position: absolute; top: 10%; width: 30%; height: 55%; border-radius: 50%; background: radial-gradient(ellipse at 36% 23%, #edab88, #aa5546 77%); box-shadow: inset 0 -6px 0 #713d50, 2px 8px 6px #50334255; }
 .lounge-chair::after { content: ''; position: absolute; inset: 40% 12% 10%; border-radius: 50%; background: linear-gradient(#c77667, #edaa91); }
@@ -550,7 +552,7 @@ header div, main { max-width: 1440px; }
     <button type="button" id="tetris-reset" class="secondary">다시 시작</button>
   </div>
 </dialog>
-<script src="office-cat.js"></script>
+<script src="office-cat.js?v=office-moments"></script>
 <script defer src="calendar-ui.js?v=today-work"></script>
 <script defer src="job-automation-core.js?v=today-work"></script>
 <script defer src="job-automation.js?v=review-history"></script>
@@ -562,6 +564,7 @@ const employees = {
   mango: ['망고', '콘텐츠 기획 담당', 'SUNI 웹툰 기획안에 한 줄 소개, 주요 인물, 회차별 사건, 다음 화로 이어지는 장면을 정리하는 구성을 제안합니다.'],
   bori: ['보리', '일정·운영 담당', '준비, 실행, 점검 순서로 할 일 목록을 제안합니다.']
 };
+const employeeMbti = { mango: 'ENFP', lulu: 'ISTJ', coco: 'ISFP', bori: 'ISTP' };
 const labels = { scheduled: '예약 대기', paused: '일시정지', missed: '예약 시각 지남', queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
 const storageKey = 'cat-office-public-demo-tasks';
 let tasks = [];
@@ -1144,12 +1147,14 @@ function animateOffice(time) {
     managerPose = 'idle';
   }
   if (!managerLine.hidden && time >= managerLineUntil) managerLine.hidden = true;
-  if (walking || managerWalking || coffeeStartedAt !== null || reading || drawnManagerPose !== managerPose) {
+  updateOfficeMoments(time, walking, feetX, feetY);
+  const managerMotion = watchingOfficeUntil > time ? 'watching' : walking ? 'walking' : managerPose;
+  if (walking || managerWalking || coffeeStartedAt !== null || reading || drawnManagerPose !== managerMotion || managerMotion === 'watching') {
     const sip = coffeeStartedAt === null ? 0 : Math.min(1, coffeeElapsed / 450, (1650 - coffeeElapsed) / 450);
     const gesture = reading ? Math.min(1, readingElapsed / 650) : sip;
-    drawOfficeCat(managerContext, 'manager', walking ? 'walking' : managerPose, managerDirection,
+    drawOfficeCat(managerContext, 'manager', managerMotion, managerDirection,
       reducedMotion.matches ? 0 : time, reducedMotion.matches && (reading || sip > 0) ? 1 : gesture);
-    drawnManagerPose = managerPose;
+    drawnManagerPose = managerMotion;
   }
   managerWalking = walking;
   const deskDepths = [managerDesk, ...Array.from(officeCats.values(), cat => cat.desk)]
@@ -1164,20 +1169,81 @@ function animateOffice(time) {
     if (object.style.zIndex !== String(depth)) object.style.zIndex = depth;
   }
   for (const cat of officeCats.values()) {
-    const motion = cat.marker.dataset.motion || 'idle';
-    const direction = cat.marker.dataset.direction;
-    if (motion === cat.lastMotion && motion !== 'working' && motion !== 'walking') continue;
+    const bow = cat.bowUntil > time;
+    const motion = bow ? 'bowing' : cat.marker.dataset.motion || 'idle';
+    const direction = bow ? cat.bowDirection : cat.marker.dataset.direction;
+    if (motion === cat.lastMotion && motion !== 'working' && motion !== 'walking' && !bow) continue;
     const animationTime = cat.marker.hasAttribute('data-strolling') ? time * .55 : time;
-    drawOfficeCat(cat.context, cat.id, motion, direction, reducedMotion.matches ? 0 : animationTime);
+    const bend = bow ? (reducedMotion.matches ? 1 : Math.min(1, (time - cat.bowStarted) / 220, (cat.bowUntil - time) / 220)) : 0;
+    drawOfficeCat(cat.context, cat.id, motion, direction, reducedMotion.matches ? 0 : animationTime, bend);
     cat.lastMotion = motion;
   }
 }
 requestAnimationFrame(animateOffice);
 
+let watchingOfficeUntil = 0;
+let nextOfficeWatch = performance.now() + 14000 + Math.random() * 14000;
+
+function showCatMoment(cat, line, duration) {
+  const text = cat.name + ' · ' + line;
+  cat.caption.textContent = text;
+  cat.caption.classList.add('office-event-caption');
+  clearTimeout(cat.momentTimer);
+  cat.momentTimer = setTimeout(() => {
+    cat.caption.classList.remove('office-event-caption');
+    if (cat.caption.textContent === text) cat.caption.textContent = cat.name;
+  }, duration);
+}
+
+function updateOfficeMoments(time, walking, feetX, feetY) {
+  if (!room.clientWidth || document.hidden) return;
+  for (const cat of officeCats.values()) {
+    const bounds = cat.context.canvas.getBoundingClientRect();
+    const distance = Math.hypot(feetX - bounds.left - bounds.width / 2,
+      feetY - bounds.top - bounds.height * 131 / 148);
+    if (distance > 65) cat.greetedManager = false;
+    if (distance < 44 && !cat.greetedManager && !cat.slacking && cat.marker.dataset.motion === 'walking') {
+      cat.greetedManager = true;
+      cat.bowStarted = time;
+      cat.bowUntil = time + 780;
+      cat.bowDirection = feetX < bounds.left + bounds.width / 2 ? 'left' : 'right';
+      showCatMoment(cat, '안녕하세요, 사장님!', 1250);
+    }
+  }
+  if (walking || coffeeStartedAt !== null || reading || document.querySelector('dialog[open]')) {
+    watchingOfficeUntil = 0;
+    return;
+  }
+  if (time < nextOfficeWatch || managerPose === 'relaxing') return;
+  nextOfficeWatch = time + 22000 + Math.random() * 26000;
+  watchingOfficeUntil = time + 2000;
+  showManagerLine(['흠… 다들 뭐 하나?'], time);
+  for (const cat of officeCats.values()) {
+    if (!cat.slacking || cat.task || Math.random() >= .5) continue;
+    cat.slacking = false;
+    cat.marker.dataset.motion = 'idle';
+    showCatMoment(cat, '앗, 딱 걸렸네!', 2300);
+  }
+}
+
+function spillAtCoffeeCorner(cat) {
+  const floor = room.getBoundingClientRect();
+  if (!floor.width || !floor.height) return;
+  const model = cat.context.canvas.getBoundingClientRect();
+  const stain = element('i', '', 'coffee-spill');
+  stain.setAttribute('aria-hidden', 'true');
+  stain.style.left = (model.left + model.width * .72 - floor.left) / floor.width * 100 + '%';
+  stain.style.top = (model.top + model.height * .88 - floor.top) / floor.height * 100 + '%';
+  room.append(stain);
+  showCatMoment(cat, '앗, 커피 쏟았다!', 2400);
+  setTimeout(() => stain.remove(), 4500);
+}
+
 function greetPassingEmployees() {
   if (document.hidden || !room.clientWidth) return;
   const walkers = [...officeCats.values()].filter(cat => cat.marker.dataset.motion === 'walking' &&
-    !cat.caption.hidden && !cat.caption.classList.contains('briefing-caption'));
+    !cat.caption.hidden && !cat.caption.classList.contains('briefing-caption') &&
+    !cat.caption.classList.contains('office-event-caption'));
   const nearby = new Set();
   const positions = walkers.map(cat => cat.position.getBoundingClientRect());
   for (const [index, first] of walkers.entries()) {
@@ -1208,6 +1274,10 @@ function greetPassingEmployees() {
 function updateOffice(id, task) {
   const cat = officeCats.get(id);
   if (cat.task === task && cat.taskStatus === task?.status) return;
+  cat.slacking = false;
+  cat.bowUntil = 0;
+  clearTimeout(cat.momentTimer);
+  cat.caption.classList.remove('office-event-caption');
   stopCoffeeChat(cat);
   if (id === 'bori' && briefingVisit) briefingVisit = undefined;
   clearTimeout(cat.restTimer);
@@ -1390,10 +1460,17 @@ function pauseAtLeisureSpot(cat, arrived = false) {
   cat.caption.textContent = cat.name;
   if (!arrived || pose === 'relaxing') positionCat(cat, x, y);
   planLeisureDeparture(cat);
-  if (pose === 'coffee') greetAtCoffeeCorner(cat);
+  if (arrived && pose === 'coffee' && Math.random() < .15) spillAtCoffeeCorner(cat);
+  else if (pose === 'coffee') greetAtCoffeeCorner(cat);
+  else if (arrived && pose === 'idle' && Math.random() < .38) {
+    cat.slacking = true;
+    cat.marker.dataset.motion = 'slacking';
+    showCatMoment(cat, '잠깐 딴짓 중…', 2500);
+  }
 }
 
 function stroll(cat) {
+  cat.slacking = false;
   stopCoffeeChat(cat);
   const previousSpot = cat.leisureSpot;
   const occupied = new Set([...officeCats.values()].map(employee => employee.leisureSpot));
@@ -1884,6 +1961,7 @@ function render() {
     const status = activeTask?.status || ['queued', 'scheduled'].find(state => states.includes(state));
     const details = element('span', '');
     details.append(element('strong', name), element('span', role, 'muted'),
+      element('span', employeeMbti[id], 'muted'),
       element('span', status === 'running' ? runningTaskLabel(activeTask) : labels[status] || '휴식 중', 'badge'));
     card.append(portrait, details);
     staff.append(card);

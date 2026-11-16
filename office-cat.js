@@ -29,13 +29,26 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
   const reading = motion === 'reading';
   const sitting = ['working', 'reporting', 'raising-paw', 'resting', 'relaxing'].includes(motion);
   const walking = motion === 'walking';
+  const watching = human && motion === 'watching';
+  const slacking = !human && motion === 'slacking';
   const swing = walking ? Math.sin(time * 0.014) : 0;
   const bounce = Math.abs(swing) * .055;
-  const yaw = motion === 'portrait' ? 0 : walking ? (direction === 'left' ? -.72 : .72) : .22;
+  const yaw = motion === 'portrait' ? 0 : watching ? Math.sin(time * .005) * .5
+    : walking || motion === 'bowing' ? (direction === 'left' ? -.72 : .72) : .22;
   const sin = Math.sin(yaw);
   const cos = Math.cos(yaw);
   const faces = [];
-  const toCamera = ([x, y, z]) => [x * cos + z * sin, y + bounce, z * cos - x * sin];
+  const hip = sitting ? .49 : .78;
+  const bend = motion === 'bowing' ? gesture * Math.PI / 2 : 0;
+  const toCamera = ([x, y, z]) => {
+    if (bend && y > hip) {
+      const height = y - hip;
+      const angle = bend * Math.min(1, height / .28);
+      y = hip + height * Math.cos(angle) - z * Math.sin(angle);
+      z = height * Math.sin(angle) + z * Math.cos(angle);
+    }
+    return [x * cos + z * sin, y + bounce, z * cos - x * sin];
+  };
 
   function addFace(points, color, light) {
     const vertices = points.map(toCamera);
@@ -54,7 +67,6 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
     }
   }
 
-  const hip = sitting ? .49 : .78;
   const head = hip + .83;
   if (human) {
     oval(0, head - .20, -.22, .34, .63, .21, '#3c252b');
@@ -102,6 +114,8 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
       oval(cupX, cupY, cupZ, .145, .15, .13, '#c4e9e5');
       oval(cupX, cupY + .13, cupZ, .15, .035, .135, '#effbf7');
       oval(cupX, cupY + .142, cupZ, .119, .021, .106, '#72442e');
+    } else if (slacking) {
+      oval(side * .14, hip + .18, .43, .10, .10, .13, fur);
     } else if (reading) {
       oval(side * (.14 + .17 * gesture), hip + .17 + .16 * gesture, .46, .105, .10, .12, fur);
     } else {
@@ -120,6 +134,12 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
     addFace([outer, [side * .29, head + .29, -.21], tip], fur, .76);
     addFace([[side * .39, head + .29, .04], [side * .35, head + .51, .005],
       [side * .22, head + .33, .065]], '#e2a2a4', .98);
+  }
+  if (slacking) {
+    const phone = (left, right, bottom, top, z, color) => addFace(
+      [[left, bottom, z], [right, bottom, z], [right, top, z], [left, top, z]], color, 1);
+    phone(-.09, .09, hip + .08, hip + .34, .53, '#27263d');
+    phone(-.07, .07, hip + .11, hip + .31, .54, '#94bfcf');
   }
   if (reading) {
     const width = .13 + .25 * gesture;
@@ -153,8 +173,8 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
   }
   for (const side of [-1, 1]) {
     if (human) {
-      oval(side * .115, head + .095, .287, .063, .014, .019, '#71464a');
-      oval(side * .115, head + .02, .29, .052, .039, .026, '#342731');
+      oval(side * .115, head + (watching ? .064 : .095), .287, .063, .014, .019, '#71464a');
+      oval(side * .115, head + .02, .29, .052, watching ? .017 : .039, .026, '#342731');
       oval(side * .115 - .013, head + .035, .315, .012, .012, .008, '#fff6ee');
       oval(side * .20, head - .083, .263, .048, .026, .020, '#df957f');
       continue;
