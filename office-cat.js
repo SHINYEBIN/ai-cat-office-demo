@@ -30,6 +30,7 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
   const sitting = ['working', 'reporting', 'raising-paw', 'resting', 'relaxing'].includes(motion);
   const walking = motion === 'walking';
   const watching = human && motion === 'watching';
+  const angry = human && motion === 'angry';
   const slacking = !human && motion === 'slacking';
   const swing = walking ? Math.sin(time * 0.014) : 0;
   const bounce = Math.abs(swing) * .055;
@@ -173,7 +174,10 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
   }
   for (const side of [-1, 1]) {
     if (human) {
-      oval(side * .115, head + (watching ? .064 : .095), .287, .063, .014, .019, '#71464a');
+      if (angry) {
+        addFace([[side * .05, head + .054, .32], [side * .05, head + .079, .32],
+          [side * .17, head + .14, .32], [side * .17, head + .109, .32]], '#61313a', 1);
+      } else oval(side * .115, head + (watching ? .064 : .095), .287, .063, .014, .019, '#71464a');
       oval(side * .115, head + .02, .29, .052, watching ? .017 : .039, .026, '#342731');
       oval(side * .115 - .013, head + .035, .315, .012, .012, .008, '#fff6ee');
       oval(side * .20, head - .083, .263, .048, .026, .020, '#df957f');
@@ -197,7 +201,7 @@ function drawOfficeCat(context, id, motion, direction, time, gesture = 0) {
   if (id === 'lulu') oval(0, head + .06, .389, .098, .022, .027, '#3d323b');
   if (human) {
     oval(0, head - .064, .301, .049, .058, .043, muzzle);
-    oval(0, head - .17, .287, .082, .018, .019, '#935650');
+    oval(0, head - .17, .287, .082, angry ? .055 : .018, .019, angry ? '#793947' : '#935650');
   } else {
     oval(0, head - .114, .459, .058, .034, .027, '#b87279');
     oval(0, head - .225, .45, .061, .024, .016, '#875258');

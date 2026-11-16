@@ -120,6 +120,7 @@ header div, main { max-width: 1440px; }
 .coffee-cup { position: absolute; bottom: calc(100% + 2px); right: 12%; width: 9px; height: 10px; border-radius: 2px 2px 4px 4px; background: #fff1df; box-shadow: 0 1px 2px #61463170; }
 .coffee-cup::after { content: ''; position: absolute; left: 85%; top: 2px; width: 4px; height: 4px; border: 1px solid #fff1df; border-radius: 50%; }
 .coffee-spill { position: absolute; width: clamp(20px, 4vw, 38px); height: 9px; transform: translate(-50%, -50%) rotate(-8deg); border-radius: 48% 60% 45% 55%; background: radial-gradient(ellipse at 36% 35%, #d19361 0 14%, #9a5c39 35%, #71442e 81%); box-shadow: 2px 2px #5c362744; pointer-events: none; }
+.room[data-manager-angry] .manager-line { color: #a12b36; background: #fff0ec; border: 1px solid #e38c83; box-shadow: 0 0 13px #ff544c80; }
 .cat-position > .office-event-caption { width: max-content; max-width: 112px; white-space: normal; text-align: center; }
 .lounge-zone { left: 37%; background: radial-gradient(ellipse, #bf8e7a 54%, #78556c 57%, #9f7480 64%, transparent 66%); box-shadow: none; color: #fff4e6; }
 .lounge-chair { position: absolute; top: 10%; width: 30%; height: 55%; border-radius: 50%; background: radial-gradient(ellipse at 36% 23%, #edab88, #aa5546 77%); box-shadow: inset 0 -6px 0 #713d50, 2px 8px 6px #50334255; }
@@ -552,7 +553,7 @@ header div, main { max-width: 1440px; }
     <button type="button" id="tetris-reset" class="secondary">다시 시작</button>
   </div>
 </dialog>
-<script src="office-cat.js?v=office-moments"></script>
+<script src="office-cat.js?v=office-siren"></script>
 <script defer src="calendar-ui.js?v=today-work"></script>
 <script defer src="job-automation-core.js?v=today-work"></script>
 <script defer src="job-automation.js?v=review-history"></script>
@@ -1148,7 +1149,7 @@ function animateOffice(time) {
   }
   if (!managerLine.hidden && time >= managerLineUntil) managerLine.hidden = true;
   updateOfficeMoments(time, walking, feetX, feetY);
-  const managerMotion = watchingOfficeUntil > time ? 'watching' : walking ? 'walking' : managerPose;
+  const managerMotion = managerAngryUntil > time ? 'angry' : watchingOfficeUntil > time ? 'watching' : walking ? 'walking' : managerPose;
   if (walking || managerWalking || coffeeStartedAt !== null || reading || drawnManagerPose !== managerMotion || managerMotion === 'watching') {
     const sip = coffeeStartedAt === null ? 0 : Math.min(1, coffeeElapsed / 450, (1650 - coffeeElapsed) / 450);
     const gesture = reading ? Math.min(1, readingElapsed / 650) : sip;
@@ -1182,7 +1183,36 @@ function animateOffice(time) {
 requestAnimationFrame(animateOffice);
 
 let watchingOfficeUntil = 0;
+let managerAngryUntil = 0;
+let officeSirenAudio;
 let nextOfficeWatch = performance.now() + 14000 + Math.random() * 14000;
+
+function prepareOfficeSiren() {
+  if (!window.AudioContext) return;
+  try {
+    officeSirenAudio ||= new AudioContext();
+    if (officeSirenAudio.state === 'suspended') void officeSirenAudio.resume().catch(() => {});
+  } catch { /* The visual reaction still plays. */ }
+}
+document.addEventListener('pointerdown', prepareOfficeSiren);
+document.addEventListener('keydown', prepareOfficeSiren);
+
+function soundOfficeSiren() {
+  if (officeSirenAudio?.state !== 'running') return;
+  const start = officeSirenAudio.currentTime;
+  const siren = officeSirenAudio.createOscillator();
+  const volume = officeSirenAudio.createGain();
+  siren.frequency.setValueAtTime(480, start);
+  for (const [offset, pitch] of [[.14, 760], [.28, 480], [.42, 760], [.56, 480]]) {
+    siren.frequency.linearRampToValueAtTime(pitch, start + offset);
+  }
+  volume.gain.setValueAtTime(0, start);
+  volume.gain.linearRampToValueAtTime(.065, start + .035);
+  volume.gain.linearRampToValueAtTime(0, start + .6);
+  siren.connect(volume).connect(officeSirenAudio.destination);
+  siren.start(start);
+  siren.stop(start + .6);
+}
 
 function showCatMoment(cat, line, duration) {
   const text = cat.name + ' · ' + line;
@@ -1197,6 +1227,10 @@ function showCatMoment(cat, line, duration) {
 
 function updateOfficeMoments(time, walking, feetX, feetY) {
   if (!room.clientWidth || document.hidden) return;
+  if (managerAngryUntil && time >= managerAngryUntil) {
+    managerAngryUntil = 0;
+    room.removeAttribute('data-manager-angry');
+  }
   for (const cat of officeCats.values()) {
     const bounds = cat.context.canvas.getBoundingClientRect();
     const distance = Math.hypot(feetX - bounds.left - bounds.width / 2,
@@ -1218,11 +1252,19 @@ function updateOfficeMoments(time, walking, feetX, feetY) {
   nextOfficeWatch = time + 22000 + Math.random() * 26000;
   watchingOfficeUntil = time + 2000;
   showManagerLine(['흠… 다들 뭐 하나?'], time);
+  let caughtSomeone = false;
   for (const cat of officeCats.values()) {
     if (!cat.slacking || cat.task || Math.random() >= .5) continue;
     cat.slacking = false;
     cat.marker.dataset.motion = 'idle';
     showCatMoment(cat, '앗, 딱 걸렸네!', 2300);
+    caughtSomeone = true;
+  }
+  if (caughtSomeone) {
+    managerAngryUntil = time + 2300;
+    room.setAttribute('data-manager-angry', '');
+    showManagerLine(['거기, 딴짓 멈춰!'], time);
+    soundOfficeSiren();
   }
 }
 
