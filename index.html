@@ -121,6 +121,8 @@ header div, main { max-width: 1440px; }
 .coffee-cup::after { content: ''; position: absolute; left: 85%; top: 2px; width: 4px; height: 4px; border: 1px solid #fff1df; border-radius: 50%; }
 .coffee-spill { position: absolute; width: clamp(20px, 4vw, 38px); height: 9px; transform: translate(-50%, -50%) rotate(-8deg); border-radius: 48% 60% 45% 55%; background: radial-gradient(ellipse at 36% 35%, #d19361 0 14%, #9a5c39 35%, #71442e 81%); box-shadow: 2px 2px #5c362744; pointer-events: none; }
 .room[data-manager-angry] .manager-line { color: #a12b36; background: #fff0ec; border: 1px solid #e38c83; box-shadow: 0 0 13px #ff544c80; }
+.manager-vision { position: absolute; z-index: 899; pointer-events: none; width: clamp(95px, 29%, 220px); height: clamp(95px, 38%, 185px); transform-origin: 50% 0; transform: translateX(-50%) rotate(var(--vision-angle, 0deg)); clip-path: polygon(50% 0, 100% 100%, 0 100%); background: linear-gradient(#f7475480, #ef273636 84%, #ef27361a); }
+.manager-vision[hidden] { display: none; }
 .cat-position > .office-event-caption { width: max-content; max-width: 112px; white-space: normal; text-align: center; }
 .lounge-zone { left: 37%; background: radial-gradient(ellipse, #bf8e7a 54%, #78556c 57%, #9f7480 64%, transparent 66%); box-shadow: none; color: #fff4e6; }
 .lounge-chair { position: absolute; top: 10%; width: 30%; height: 55%; border-radius: 50%; background: radial-gradient(ellipse at 36% 23%, #edab88, #aa5546 77%); box-shadow: inset 0 -6px 0 #713d50, 2px 8px 6px #50334255; }
@@ -726,6 +728,10 @@ manager.style.setProperty('--cat-y', 'calc(24% - clamp(20px, 3vw, 36px))');
 const managerContext = managerModel.getContext('2d');
 drawOfficeCat(managerContext, 'manager', 'resting', '', 0);
 room.append(manager, managerDesk);
+const managerVision = element('i', '', 'manager-vision');
+managerVision.hidden = true;
+managerVision.setAttribute('aria-hidden', 'true');
+room.append(managerVision);
 
 const managerMoves = new Map([
   ['ArrowLeft', [-1, 0]], ['ArrowUp', [0, -1]],
@@ -1150,6 +1156,12 @@ function animateOffice(time) {
   if (!managerLine.hidden && time >= managerLineUntil) managerLine.hidden = true;
   updateOfficeMoments(time, walking, feetX, feetY);
   const managerMotion = managerAngryUntil > time ? 'angry' : watchingOfficeUntil > time ? 'watching' : walking ? 'walking' : managerPose;
+  managerVision.hidden = managerMotion !== 'watching';
+  if (!managerVision.hidden) {
+    managerVision.style.left = (feetX - room.getBoundingClientRect().left) + 'px';
+    managerVision.style.top = (managerBounds.top + managerBounds.height * .35 - roomTop) + 'px';
+    managerVision.style.setProperty('--vision-angle', (reducedMotion.matches ? 0 : -Math.sin(time * .005) * 36) + 'deg');
+  }
   if (walking || managerWalking || coffeeStartedAt !== null || reading || drawnManagerPose !== managerMotion || managerMotion === 'watching') {
     const sip = coffeeStartedAt === null ? 0 : Math.min(1, coffeeElapsed / 450, (1650 - coffeeElapsed) / 450);
     const gesture = reading ? Math.min(1, readingElapsed / 650) : sip;
