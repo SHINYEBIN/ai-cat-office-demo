@@ -542,7 +542,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js?v=natural-schedule"></script>
-<script defer src="job-automation-core.js?v=review-history"></script>
+<script defer src="job-automation-core.js?v=final-approval"></script>
 <script defer src="job-automation.js?v=review-history"></script>
 
 <script>
@@ -1655,18 +1655,70 @@ function makeCancelButton(task, view) {
   return button;
 }
 
+let pendingJobs = [];
+
+function renderJobReview(job) {
+  const item = element('li', '');
+  const title = element(job.url ? 'a' : 'strong', job.organization + ' · ' + job.title);
+  if (job.url) { title.href = job.url; title.target = '_blank'; title.rel = 'noopener noreferrer'; }
+  item.append(title, element('p', '마감 ' + job.deadline + ' · 코코 ' + job.outcome),
+    element('p', job.reason, 'muted'));
+  const actions = element('div', '', 'actions');
+  const approve = element('button', '최종 승인');
+  const reject = element('button', '최종 반려', 'secondary');
+  const rejection = element('form', '');
+  rejection.hidden = true;
+  const reasonLabel = element('label', '최종 반려 사유');
+  const reason = element('input', '');
+  reason.required = true;
+  reason.maxLength = 300;
+  reasonLabel.append(reason);
+  rejection.append(reasonLabel, element('button', '반려 확정'));
+  const status = element('p', '');
+  status.setAttribute('role', 'status');
+  const decide = async (approved, note = '') => {
+    approve.disabled = reject.disabled = rejection.querySelector('button').disabled = true;
+    const detail = { id: job.id, approved, reason: note };
+    window.dispatchEvent(new CustomEvent('cat-office-final-job-review', { detail }));
+    try {
+      if (!detail.done) throw new Error('결재 기능을 불러오지 못했어요.');
+      const message = await detail.done;
+      const notice = element('p', message);
+      notice.setAttribute('role', 'status');
+      pendingList.prepend(notice);
+    } catch (error) {
+      status.textContent = error.message;
+      approve.disabled = reject.disabled = rejection.querySelector('button').disabled = false;
+    }
+  };
+  approve.onclick = () => void decide(true);
+  reject.onclick = () => { rejection.hidden = false; reason.focus(); };
+  rejection.onsubmit = event => {
+    event.preventDefault();
+    if (reason.value.trim()) void decide(false, reason.value.trim());
+  };
+  actions.append(approve, reject);
+  item.append(actions, rejection, status);
+  return item;
+}
+
 function renderPending() {
   const pending = tasks.filter(task => ['scheduled', 'queued', 'running', 'review'].includes(task.status));
-  document.querySelector('#whiteboard-count').textContent = pending.length + '건';
+  document.querySelector('#whiteboard-count').textContent = pending.length + pendingJobs.length + '건';
   const visible = pendingReviewsOnly ? pending.filter(task => task.status === 'review') : pending;
-  if (visible.length) {
+  if (visible.length || pendingJobs.length) {
     const list = element('ul', '');
     for (const task of visible) {
       const item = element('li', '');
       item.append(renderTaskCard(task, pendingReviewsOnly ? 'review' : 'pending'));
       list.append(item);
     }
-    pendingList.replaceChildren(list);
+    pendingList.replaceChildren(...(visible.length ? [list] : []));
+    if (pendingJobs.length) {
+      const jobs = element('ul', '', 'schedule-list');
+      jobs.replaceChildren(...pendingJobs.map(renderJobReview));
+      pendingList.append(element('h3', '채용공고 최종 결재'), jobs);
+    }
   } else {
     pendingList.replaceChildren(element('p', pendingReviewsOnly ? '결재 대기 업무가 없습니다.' : '남은 업무가 없습니다.', 'muted'));
   }
@@ -1758,11 +1810,14 @@ function renderHistory() {
         const when = report.completedAt ? formatScheduledStart(report.completedAt) : report.message.slice(0, 10);
         details.append(element('summary', when + ' · 루루 채용공고 조사'), element('p', report.message));
         const list = element('ul', '', 'schedule-list');
-        for (const job of report.jobs || []) {
+        for (const job of (report.jobs || []).filter(item => item.finalDecision !== '최종 결재 대기')) {
           const row = element('li', '');
           const title = element(job.url ? 'a' : 'strong', job.organization + ' · ' + job.title);
           if (job.url) { title.href = job.url; title.target = '_blank'; title.rel = 'noopener noreferrer'; }
-          row.append(title, element('p', '코코 · ' + (job.outcome === '조건 미충족' ? '반려' : job.outcome) + ' · ' + job.reason));
+          const outcome = job.outcome === '조건 미충족' ? '반려' : job.outcome;
+          const review = [outcome, job.reason].filter(value => typeof value === 'string' && value.trim()).join(' · ');
+          row.append(title, element('p', '코코 · ' + (review || '검토 상세 기록 없음')));
+          if (job.finalDecision) row.append(element('p', '사장 · ' + job.finalDecision + (job.finalReason ? ' · ' + job.finalReason : '')));
           if (job.calendarState) row.append(element('p', '보리 · ' + job.calendarState + ' · ' + job.deadline, 'muted'));
           list.append(row);
         }
@@ -1777,12 +1832,15 @@ function renderHistory() {
 }
 window.addEventListener('cat-office-job-reports', event => {
   jobReports = event.detail.history;
+  pendingJobs = event.detail.pending || [];
+  renderPending();
   const completed = event.detail.completed;
   if (completed?.counts) {
     newestReview = completed;
     const { approved, rejected, needsReview } = completed.counts;
     document.querySelector('#review-toast-message').textContent =
       '1차 승인 ' + approved + '건 · 반려 ' + rejected + '건 · 확인 필요 ' + needsReview + '건';
+    document.querySelector('#review-toast-open').textContent = pendingJobs.length ? '결재확인' : '업무 이력 보기';
     reviewToast.hidden = false;
   }
   renderHistory();
@@ -1790,6 +1848,7 @@ window.addEventListener('cat-office-job-reports', event => {
 document.querySelector('#review-toast-close').onclick = () => { reviewToast.hidden = true; };
 document.querySelector('#review-toast-open').onclick = () => {
   reviewToast.hidden = true;
+  if (pendingJobs.length) { openPending(true); return; }
   historyEmployee = 'coco';
   renderHistory();
   location.hash = '#report-panel';

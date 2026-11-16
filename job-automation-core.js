@@ -84,7 +84,9 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
 
   function publishReports(config, completed) {
     const history = config?.reports || (config?.report ? [config.report] : []);
-    window.dispatchEvent(new CustomEvent('cat-office-job-reports', { detail: { history, completed } }));
+    window.dispatchEvent(new CustomEvent('cat-office-job-reports', {
+      detail: { history, completed, pending: config?.pendingJobs || [] }
+    }));
   }
 
   function render(config, message) {
@@ -144,25 +146,21 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           if (read()?.revision !== config.revision) return;
           const approved = reviews.filter(job => job.outcome === '1차 승인');
           const registered = new Set(config.registered);
-          const additions = approved.filter(job => !registered.has(job.id));
-          if (additions.length && showPhase) await showPhase('bori', '마감 일정 등록');
-          if (read()?.revision !== config.revision) return;
-          const result = {};
-          window.dispatchEvent(new CustomEvent('cat-office-register-job-deadlines', { detail: { jobs: additions, result } }));
-          if (result.registered === undefined) throw new Error('보리가 일정을 저장하지 못했어요.');
-          for (const job of additions) registered.add(job.id);
-          config.registered = [...registered];
-          const addedIds = new Set(result.registeredIds);
+          const decisions = config.decisions || {};
+          const pending = new Map((config.pendingJobs || []).map(job => [job.id, job]));
+          for (const job of reviews) {
+            if (registered.has(job.id) || decisions[job.id] || job.outcome === '반려') pending.delete(job.id);
+            else pending.set(job.id, job);
+          }
+          config.pendingJobs = [...pending.values()];
           const rejected = reviews.filter(job => job.outcome === '반려').length;
           const needsReview = reviews.filter(job => job.outcome === '확인 필요').length;
-          config.report = { jobs: reviews.map(job => ({ ...job, calendarState: job.outcome === '1차 승인'
-            ? (addedIds.has(job.id) ? '신규 등록' : '이전 등록') : '' })),
-            counts: { approved: approved.length, rejected, needsReview, registered: result.registered },
+          config.report = { jobs: reviews.map(job => ({ ...job, calendarState: registered.has(job.id) ? '이전 등록' : '',
+            finalDecision: decisions[job.id] || (pending.has(job.id) ? '최종 결재 대기' : '') })),
+            counts: { approved: approved.length, rejected, needsReview },
             message: day + ' · 루루 조사 ' + jobs.length +
             '건 → 코코 1차 승인 ' + approved.length + '건 · 반려 ' + rejected + '건 · 확인 필요 ' +
-            reviews.filter(job => job.outcome === '확인 필요').length + '건 → 보리 신규 등록 ' + result.registered + '건' };
-          if (!approved.length) config.report.message += ' · 승인된 공고가 없어 등록할 일정이 없어요.';
-          else if (!result.registered) config.report.message += ' · 승인된 공고는 이미 처리했어요.';
+            needsReview + '건 · 사장 결재 대기 ' + pending.size + '건' };
         } catch (error) {
           if (error.rateLimited) config.paused = true;
           config.report = { message: day + ' · ' + (error.name === 'TimeoutError' || error.name === 'TypeError'
@@ -310,6 +308,35 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
       if (feedback) feedback.textContent = '저장된 루루 예약을 읽지 못했어요.';
     }
   }
+  window.addEventListener('cat-office-final-job-review', event => {
+    const detail = event.detail;
+    detail.done = navigator.locks.request(key, async () => {
+      const config = read();
+      const job = config?.pendingJobs?.find(item => item.id === detail.id);
+      if (!job) throw new Error('이미 결재한 공고예요.');
+      const decision = detail.approved ? '최종 승인' : '최종 반려';
+      let calendarState = '';
+      if (detail.approved) {
+        const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+        if (job.deadline < today) throw new Error('이미 마감된 공고예요.');
+        const result = {};
+        window.dispatchEvent(new CustomEvent('cat-office-register-job-deadlines', { detail: { jobs: [job], result } }));
+        if (result.registered === undefined) throw new Error('보리가 일정을 저장하지 못했어요.');
+        calendarState = result.registered ? '신규 등록' : '이전 등록';
+        config.registered = [...new Set([...(config.registered || []), job.id])];
+      }
+      config.decisions = { ...config.decisions, [job.id]: decision };
+      config.pendingJobs = config.pendingJobs.filter(item => item.id !== job.id);
+      const update = report => ({ ...report, jobs: report.jobs?.map(item => item.id === job.id
+        ? { ...item, finalDecision: decision, finalReason: detail.reason, calendarState } : item) });
+      if (config.report) config.report = update(config.report);
+      if (config.reports) config.reports = config.reports.map(update);
+      write(config);
+      publishReports(config);
+      if (detail.approved && showPhase) void Promise.resolve(showPhase('bori', '마감 일정 등록')).finally(() => showPhase());
+      return detail.approved ? '최종 승인했어요. 보리 일정에서 확인할 수 있어요.' : '최종 반려했어요. 사유는 업무 이력에 남겼어요.';
+    });
+  });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void check(); });
   restoreStatus();
   void check();
