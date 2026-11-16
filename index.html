@@ -1,0 +1,2202 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 캣 오피스 · 업무 데모</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #f6f4fa; color: #271e38; font: 16px/1.6 system-ui, sans-serif; }
+header { background: #29203d; color: white; }
+header div, main { max-width: 1120px; margin: auto; padding: 24px; }
+header strong { font-size: 20px; }
+header span { margin-left: 12px; color: #e2d3ff; }
+h1 { margin: 0; font-size: clamp(28px, 5vw, 44px); letter-spacing: -.05em; }
+h2 { margin: 0 0 14px; font-size: 21px; }
+p { margin: 8px 0; }
+.muted { color: #61566e; }
+.staff { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0; }
+.employee, section { background: white; border: 1px solid #e4dced; border-radius: 16px; padding: 18px; }
+.employee strong, .employee span, label { display: block; }
+.office { margin-bottom: 20px; }
+.room { position: relative; isolation: isolate; overflow: hidden; height: clamp(240px, 38vw, 350px); border-radius: 14px; background: linear-gradient(#e8ddf5 0 29%, transparent 29%), repeating-linear-gradient(90deg, #ecd9c8 0 39px, #e2cbb7 39px 40px); }
+.room::before { content: ''; position: absolute; inset: 6% 18% 76%; border: 5px solid #fff6ee; border-radius: 8px; background: repeating-linear-gradient(90deg, #d4e6f8 0 24%, #fff6ee 24% 25%); }
+.desk { position: absolute; z-index: 4; top: 48%; left: var(--desk-x); width: 19%; transform: translateX(-50%); padding: 12px 2px 3px; text-align: center; background: linear-gradient(#d6a778 0 12px, #8b583e 12px); color: white; border-radius: 7px 7px 4px 4px; box-shadow: 0 4px 0 #704330, 0 8px 10px #53351e30; font-size: clamp(10px, 1.6vw, 13px); }
+.chair { position: absolute; top: calc(48% - 48px); left: var(--desk-x); transform: translateX(-50%); width: clamp(40px, 7vw, 66px); height: 59px; }
+.chair::before { content: ''; position: absolute; inset: 0 5px 15px; border-radius: 15px 15px 10px 10px; background: linear-gradient(145deg, #afa0d4, #736198); border: 2px solid #655481; box-shadow: inset 0 0 0 3px #ffffff24, 0 3px 5px #51406840; }
+.chair::after { content: ''; position: absolute; inset: auto 0 0; height: 18px; border-radius: 9px 9px 6px 6px; background: linear-gradient(#a795c8 65%, #57466f 66%); box-shadow: 0 4px 0 -2px #4b4058; }
+.laptop { position: absolute; top: 2px; left: 50%; width: clamp(32px, 6vw, 55px); height: 9px; transform: translateX(-50%); border-radius: 2px 2px 4px 4px; background: repeating-linear-gradient(90deg, #9298aa 0 2px, #44495b 2px 4px) center 2px / 76% 3px no-repeat, linear-gradient(#61697e 68%, #303647 69%); box-shadow: 0 2px 3px #352a2c55; }
+.laptop::before { content: ''; position: absolute; inset: auto 2px 100%; height: clamp(15px, 2.5vw, 23px); border: 2px solid #34394c; border-radius: 4px 4px 1px 1px; background: linear-gradient(135deg, #657895, #29334c); transform: skewX(-9deg); transform-origin: bottom; }
+.desk[data-active="true"] .laptop::before { background: repeating-linear-gradient(0deg, transparent 0 3px, #dbddff70 3px 4px) center / 55% 65% no-repeat, linear-gradient(135deg, #98a5fc, #5453a3); }
+.office-cat { position: absolute; z-index: 3; top: var(--cat-y); left: var(--cat-x); transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 2px; transition: left .9s ease-in-out, top .9s ease-in-out; }
+.office-cat[data-strolling] { transition-duration: var(--stroll-duration); }
+.office-cat span:last-child { background: white; border-radius: 12px; padding: 0 6px; font-size: 12px; white-space: nowrap; }
+.office-cat[data-motion="working"], .office-cat[data-motion="reporting"] { z-index: 3; }
+.office-cat[data-motion="working"] .cat-caption { position: absolute; bottom: 100%; }
+.office-cat .cat-caption { position: absolute; bottom: 100%; z-index: 2; font-size: clamp(9px, 1.5vw, 12px); }
+.employee span { font-size: 14px; }
+.badge { color: #55328e; font-weight: 700; }
+.layout { display: grid; gap: 20px; }
+.whiteboard { position: absolute; z-index: 5; right: 3%; top: 24%; width: 17%; min-height: 49px; padding: 4px 2px; border: 3px solid #504b56; border-radius: 3px; background: #fffdf6; color: #3c3546; box-shadow: 3px 4px #543a353a; font-size: clamp(9px, 1.3vw, 13px); line-height: 1.25; }
+.whiteboard::after { content: ''; position: absolute; inset: 100% 16% auto; height: 15px; border-inline: 3px solid #504b56; pointer-events: none; }
+.whiteboard span { display: block; margin-top: 4px; color: #713988; }
+.task-dialog { width: min(480px, calc(100% - 32px)); max-height: 80dvh; border: 1px solid #e4dced; border-radius: 16px; padding: 20px; color: #271e38; }
+.task-dialog::backdrop { background: #22152d88; }
+.task-dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.task-dialog-heading h2 { margin: 0; }
+.task-dialog ul { padding-left: 22px; overflow-wrap: anywhere; }
+.task-dialog li + li { margin-top: 10px; }
+.task-dialog button:disabled { opacity: .52; cursor: default; }
+label { font-weight: 650; margin-top: 10px; }
+textarea, select, button { font: inherit; }
+textarea, select { width: 100%; border: 1px solid #a99bb9; border-radius: 8px; padding: 10px; background: white; color: inherit; }
+textarea { min-height: 95px; resize: vertical; }
+button { border: 1px solid #5937a1; background: #5937a1; color: white; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+form > button { margin-top: 12px; }
+button.secondary { color: #5937a1; background: white; }
+:focus-visible { outline: 3px solid #a879ef; outline-offset: 3px; }
+article { border-top: 1px solid #e4dced; padding: 14px 0; overflow-wrap: anywhere; }
+article h3 { margin: 0; font-size: 17px; white-space: pre-wrap; }
+article ol { margin: 8px 0; padding-left: 23px; }
+.suni-result { white-space: pre-wrap; overflow-wrap: anywhere; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+#feedback { min-height: 26px; }
+@media (max-width: 700px) { header div, main { padding: 16px; } .staff { grid-template-columns: repeat(2, 1fr); } .layout { grid-template-columns: 1fr; } }
+.office-model { display: block; width: clamp(46px, 8vw, 84px); height: auto; }
+.office-cat:is([data-motion="resting"], [data-motion="relaxing"], [data-motion="walking"]) .cat-caption { top: 93%; bottom: auto; }
+@media (prefers-reduced-motion: reduce) { .office-cat { transition: none; } }
+</style>
+<style>
+header { background: #fff; color: #35214f; border-bottom: 1px solid #e3d8ef; }
+header span { color: #624889; }
+header div, main { max-width: 1440px; }
+.overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 285px); gap: 16px; margin: 20px 0 16px; align-items: start; }
+.office { margin: 0; }
+.staff { grid-template-columns: 1fr; margin: 0; gap: 8px; }
+.employee { display: flex; align-items: center; gap: 12px; padding: 9px 12px; }
+.employee { width: 100%; color: inherit; text-align: left; }
+.employee:hover { background: #f6efff; border-color: #b79bd8; }
+.staff-model { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 50%; background: radial-gradient(circle at top, #fff, #eadcf9); }
+.room {
+  height: clamp(360px, 39vw, 500px);
+  background:
+    linear-gradient(#ede6df 0 23%, #aa8872 23% 24%, transparent 24%),
+    radial-gradient(ellipse at 55% 31%, #fff6dcb5, transparent 65%),
+    repeating-linear-gradient(106deg, #d9ad88 0 26px, #bb916e 26px 28px, #e0b693 28px 53px, #c69a75 53px 55px);
+}
+.room::before {
+  inset: 5% 12% 81%;
+  border-color: #fff6ea;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 24%, #fff6ea 24% 25%),
+    radial-gradient(ellipse at 72% 0, #fff9dc, transparent 55%),
+    linear-gradient(#8cc4eb, #d8efff);
+  box-shadow: inset 0 0 8px #719dc333, 0 3px 0 #c0aa99;
+}
+.room::after { content: ''; position: absolute; inset: 24% 0 0; pointer-events: none; box-shadow: inset 0 0 40px #98694e29; }
+.room::before { content: none; }
+.office-window { position: absolute; inset: 5% 12% 81%; overflow: hidden; border: 5px solid #fff6ea; border-radius: 8px; background: linear-gradient(var(--sky-top, #8cc4eb), var(--sky-bottom, #d8efff)); box-shadow: 0 3px #c0aa99; }
+.office-window::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 24%, #fff6ea 24% 25%); }
+.sky-body { position: absolute; left: var(--body-x, 25%); top: var(--body-y, 45%); translate: -50% -50%; width: clamp(12px, 3vw, 27px); aspect-ratio: 1; border-radius: 50%; background: #fff2a2; box-shadow: 0 0 13px #ffd17b; }
+.office-window[data-night] .sky-body { background: #f5edce; box-shadow: inset -5px 0 #919bc4, 0 0 9px #e0e5f288; }
+.sky-stars { display: none; position: absolute; inset: 0; background: radial-gradient(circle at 8% 32%, #fff 0 1px, transparent 2px), radial-gradient(circle at 29% 20%, #fff 0 1px, transparent 2px), radial-gradient(circle at 44% 54%, #fff 0 1px, transparent 2px), radial-gradient(circle at 62% 25%, #fff 0 1px, transparent 2px), radial-gradient(circle at 88% 33%, #fff 0 1px, transparent 2px), radial-gradient(circle at 93% 72%, #fff 0 1px, transparent 2px); }
+.office-window[data-night] .sky-stars { display: block; }
+.office-sunlight { position: absolute; inset: 24% 0 0; pointer-events: none; z-index: 0; opacity: var(--sunlight, 0); background: linear-gradient(#fff0ac92, #ffe3a43d 70%, transparent); clip-path: polygon(var(--sun-start-left, 40%) 0, var(--sun-start-right, 52%) 0, var(--sun-end-right, 65%) 92%, var(--sun-end-left, 32%) 92%); transition: opacity .6s ease, clip-path .6s ease; }
+.office-night-lighting { position: absolute; inset: 0; pointer-events: none; z-index: 900; opacity: var(--night-light, 0); transition: opacity .6s ease; background: radial-gradient(ellipse at 8% 24%, #ffcf8047, transparent 35%), radial-gradient(ellipse at 92% 24%, #ffcf8047, transparent 35%), linear-gradient(#2119364f, #20183177); }
+.office-sconce { position: absolute; z-index: 901; top: 19%; left: 7%; width: clamp(9px, 1.5vw, 17px); height: 9px; pointer-events: none; border-radius: 3px 3px 6px 6px; background: #887366; box-shadow: 0 2px #594638; }
+.office-sconce-right { left: auto; right: 7%; }
+.office-sconce::after { content: ''; position: absolute; inset: 1px 2px; border-radius: inherit; opacity: var(--night-light, 0); background: #ffe4ac; box-shadow: 0 0 13px 4px #ffb961a0; transition: opacity .6s ease; }
+.desk { top: var(--desk-y); width: 23%; }
+.desk::before { content: ''; position: absolute; inset: -5px -2px auto; height: 8px; transform: skewX(-19deg); transform-origin: bottom; background: linear-gradient(100deg, #e1b587, #c89264); border-radius: 3px; }
+.desk::after { content: ''; position: absolute; inset: 100% 9% auto; height: 12px; border-inline: 5px solid #4a2e26; box-shadow: 4px 5px 7px -3px #30202199; pointer-events: none; }
+.chair { top: calc(var(--desk-y) - 48px); }
+.zone { position: absolute; bottom: 5%; width: 26%; height: 15%; border-radius: 11px; background: #e7c9ab; box-shadow: 0 4px #a57963; text-align: center; color: #452f38; font-size: 12px; }
+.zone strong { position: absolute; inset: auto 0 2px; }
+.coffee-zone { left: 5%; bottom: 12%; height: 12%; border: 2px solid #a28770; border-top: 0; border-radius: 3px 3px 6px 6px; background: linear-gradient(112deg, #382822, #221917); box-shadow: 0 4px #645043, 2px 8px 12px #513a3038; color: #302019; }
+.coffee-zone::before { content: ''; position: absolute; inset: -7px -5px auto; height: 10px; border-radius: 3px; background: linear-gradient(#fff1d8 55%, #d1b79a 56%); box-shadow: 0 2px 3px #2b1b1955; }
+.coffee-zone strong { inset: auto auto 5px 50%; transform: translateX(-50%); padding: 0 5px; background: #d9b68b; border-radius: 2px; white-space: nowrap; font-size: clamp(8px, 1.4vw, 11px); }
+.coffee-machine { position: absolute; bottom: calc(100% + 1px); left: 50%; transform: translateX(-50%); width: clamp(24px, 5vw, 47px); height: 32px; border: 2px solid #353034; border-radius: 5px; background: radial-gradient(circle at 83% 16%, #9cdfba 0 2px, transparent 3px), linear-gradient(#6e6865 33%, #242024 34% 86%, #a49b8e 87%); box-shadow: 2px 2px #68493470; }
+.coffee-machine::before { content: ''; position: absolute; top: 36%; left: 43%; width: 19%; height: 18%; background: #aeb5bb; border-radius: 0 0 3px 3px; }
+.coffee-machine::after { content: ''; position: absolute; bottom: 14%; left: 39%; width: 26%; height: 23%; background: #fff1df; border-radius: 1px 1px 4px 4px; }
+.coffee-cup { position: absolute; bottom: calc(100% + 2px); right: 12%; width: 9px; height: 10px; border-radius: 2px 2px 4px 4px; background: #fff1df; box-shadow: 0 1px 2px #61463170; }
+.coffee-cup::after { content: ''; position: absolute; left: 85%; top: 2px; width: 4px; height: 4px; border: 1px solid #fff1df; border-radius: 50%; }
+.lounge-zone { left: 37%; background: radial-gradient(ellipse, #bf8e7a 54%, #78556c 57%, #9f7480 64%, transparent 66%); box-shadow: none; color: #fff4e6; }
+.lounge-chair { position: absolute; top: 10%; width: 30%; height: 55%; border-radius: 50%; background: radial-gradient(ellipse at 36% 23%, #edab88, #aa5546 77%); box-shadow: inset 0 -6px 0 #713d50, 2px 8px 6px #50334255; }
+.lounge-chair::after { content: ''; position: absolute; inset: 40% 12% 10%; border-radius: 50%; background: linear-gradient(#c77667, #edaa91); }
+.lounge-chair-left { left: 3%; transform: rotate(-19deg); }
+.lounge-chair-right { right: 3%; transform: rotate(19deg); background: radial-gradient(ellipse at 36% 23%, #ae9ac9, #5e527c 77%); }
+.lounge-chair-right::after { background: linear-gradient(#8775a5, #b2a0c9); }
+.lounge-table { position: absolute; z-index: 1; left: 31%; top: 32%; width: 38%; height: 23%; border-radius: 50%; background: linear-gradient(150deg, #e6b382, #ad6f50); box-shadow: 0 4px #80503b, 0 9px 5px #67483755; }
+.lounge-table::after { content: ''; position: absolute; left: 44%; top: 115%; width: 13%; height: 75%; background: #684537; }
+.books-zone { right: 5%; background: none; box-shadow: none; color: white; }
+.books-zone strong { bottom: 1px; color: #fff5e8; text-shadow: 0 1px 2px #36241b; }
+.books { --shelf-depth: clamp(5px, 1.1vw, 11px); position: absolute; inset: 0 10% 16% 5%; display: grid; grid-template-rows: 1fr 1fr; padding: 3px; gap: 4px; border: 2px solid #aa7953; border-radius: 2px; background: linear-gradient(100deg, #945f3d, #bb875c 55%, #785036); box-shadow: 6px 8px 10px #51332365, 0 5px 0 #69442f; }
+.books::before { content: ''; position: absolute; top: calc(-1 * var(--shelf-depth)); left: -2px; right: -2px; height: var(--shelf-depth); transform: skewX(-42deg); transform-origin: bottom; border-radius: 2px 2px 0 0; background: repeating-linear-gradient(3deg, transparent 0 4px, #8a533b25 5px 6px), linear-gradient(95deg, #cf9666, #edbe88); }
+.books::after { content: ''; position: absolute; left: calc(100% + 2px); top: -2px; width: var(--shelf-depth); height: calc(100% + 4px); transform: skewY(-48deg); transform-origin: left; background: linear-gradient(90deg, #755036, #4e3429); }
+.shelf-row { display: flex; align-items: end; gap: 2px; padding: 0 5% 2px; min-height: 0; background: linear-gradient(#33231f, #62412e); box-shadow: inset 4px 3px 5px #231914b0, 0 2px #d1a173; }
+.shelf-row i { position: relative; flex: 1 1 0; min-width: 0; height: var(--spine-height, 84%); border-radius: 1px 1px 0 0; background: linear-gradient(90deg, #ffffff52, transparent 30% 67%, #0006), var(--spine-color); box-shadow: 1px 1px 1px #211713; }
+.shelf-row i:nth-child(3n) { flex-grow: 1.25; }
+.shelf-row i::after { content: ''; position: absolute; inset: 19% 1px auto; height: 1px; background: #fff8; }
+.office-cat:is([data-motion="resting"], [data-motion="relaxing"]) { z-index: 5; }
+.workspace { display: grid; grid-template-columns: 145px minmax(0, 1fr); max-width: 1540px; margin: auto; }
+.sidebar { align-self: start; position: sticky; top: 0; display: grid; gap: 6px; padding: 24px 10px; }
+.sidebar a { color: #553779; text-decoration: none; padding: 9px 12px; border-radius: 9px; font-weight: 650; }
+.sidebar a:hover, .sidebar a:focus-visible, .sidebar a[aria-current] { background: #e9def9; }
+.workspace main { width: 100%; min-width: 0; }
+.manager-desk { width: 19%; min-height: clamp(30px, 3vw, 34px); background: linear-gradient(#ba916d 0 12px, #644634 12px); }
+.manager-monitor { position: absolute; bottom: calc(100% - 7px); left: 43%; width: clamp(29px, 5.8vw, 58px); aspect-ratio: 1.65; transform: translateX(-50%); border: 2px solid #34394c; border-radius: 4px; background: linear-gradient(160deg, #525568, #333544); }
+.manager-monitor::before { content: ''; position: absolute; inset: 56% 39% -2px; border-radius: 3px 3px 0 0; background: #292b38; }
+.manager-monitor::after { content: ''; position: absolute; top: 100%; left: 50%; width: 42%; height: 5px; transform: translateX(-50%); background: #34394c; clip-path: polygon(43% 0, 57% 0, 57% 65%, 100% 65%, 100% 100%, 0 100%, 0 65%, 43% 65%); }
+.manager-mouse { position: absolute; top: 4px; left: 75%; width: clamp(6px, 1vw, 11px); height: clamp(5px, .8vw, 9px); border-radius: 50%; background: #363749; box-shadow: inset 0 2px #74788e; }
+.manager-nameplate { position: absolute; z-index: 1; top: 10px; left: clamp(4px, 1vw, 12px); padding: 1px 4px; border: 1px solid #bd9150; border-radius: 2px; background: linear-gradient(#ffe4a3, #d6a256); box-shadow: 0 2px #714723; color: #3c2817; font: 700 clamp(8px, 1.2vw, 11px)/1.2 sans-serif; white-space: nowrap; }
+.manager .office-model { width: clamp(65px, 11.5vw, 120px); }
+.manager { transition: none; pointer-events: none; }
+.manager .manager-line { position: absolute; bottom: 91%; left: 50%; transform: translateX(-50%); padding: 3px 9px; }
+.manager-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.manager-controls button { min-width: 44px; min-height: 44px; touch-action: manipulation; }
+#manager-interact[disabled], .manager-key-hint { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  #manager-help, .manager-controls, #manager-interact { display: none; }
+  .manager-key-hint:not([hidden]) { display: block; position: absolute; z-index: 1001; bottom: 5px; left: 50%; transform: translateX(-50%); padding: 3px 9px; border-radius: 12px; background: #30223e; color: white; font-size: 12px; white-space: nowrap; pointer-events: none; }
+}
+.office-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.office-heading h2 { margin: 0; }
+.office-cat[data-motion="reporting"] { z-index: 5; }
+.office-cat[data-motion="reporting"] .cat-caption { top: 93%; bottom: auto; }
+.cat-position { position: absolute; left: var(--cat-x); top: var(--cat-y); transition: left var(--cat-travel-duration, .9s) ease-in-out, top var(--cat-travel-duration, .9s) ease-in-out; }
+.cat-position:has([data-strolling]) { transition-duration: var(--stroll-duration); transition-timing-function: linear; }
+.desk-menu-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px; margin-top: 16px; }
+.desk-menu-actions button { width: 100%; min-height: 48px; }
+.monitor-dialog { background: #f8f5fb; border: 7px solid #383247; border-bottom-width: 17px; border-radius: 14px; box-shadow: 0 0 0 2px #756a86, 0 18px 45px #1a122d65; }
+.monitor-viewport { display: contents; }
+.monitor-dialog { padding: 0; overflow: visible; transform: translateY(-12px); }
+.monitor-dialog .monitor-viewport { display: block; max-height: calc(80dvh - 24px); overflow: auto; padding: 20px; border-radius: 7px; }
+.monitor-dialog::before, .monitor-dialog::after { content: ''; position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.monitor-dialog::before { bottom: -33px; width: 29px; height: 17px; background: linear-gradient(90deg,#343448,#645b72 48%,#393747); }
+.monitor-dialog::after { bottom: -40px; width: 96px; height: 8px; border-radius: 7px 7px 3px 3px; background: linear-gradient(#6d617e,#3e374e); box-shadow: 0 3px 6px #18112170; }
+@media (max-width: 560px) {
+  .monitor-dialog::before { bottom: -26px; height: 10px; width: 22px; }
+  .monitor-dialog::after { bottom: -31px; width: 65px; height: 6px; }
+}
+.schedule-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.schedule-list { list-style: none; padding: 0 !important; margin: 0; }
+.schedule-list li { padding: 10px 0; border-top: 1px solid #e4dced; }
+.schedule-list time { display: block; margin-top: 4px; }
+.schedule-list .actions { margin-top: 6px; }
+.schedule-list button { padding: 5px 9px; }
+.schedule-form { margin-top: 12px; }
+.schedule-form input { display: block; width: 100%; padding: 8px; margin: 4px 0 10px; font: inherit; }
+.schedule-form .all-day-option { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+.schedule-form .all-day-option input { width: auto; margin: 0; }
+.monitor-dialog .task-dialog-heading, .monitor-dialog .office-heading { margin: -20px -20px 14px; padding: 10px 14px; background: #493b62; color: #fff; }
+.monitor-dialog h2 { font-size: 1.2rem; }
+.monitor-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 8px; }
+.monitor-links a { display: grid; min-height: 48px; place-items: center; padding: 6px; border-radius: 8px; color: white; background: #5937a1; text-decoration: none; }
+.stock-quotes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 !important; list-style: none; }
+.stock-quotes li { display: grid; gap: 3px; margin-top: 0; padding: 9px 10px; border: 1px solid #e4dced; border-radius: 8px; background: white; }
+.stock-quotes li + li { margin-top: 0; }
+.stock-quotes .quote-price { color: #342647; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stock-quotes time { font-size: .75rem; }
+#news-dialog { width: min(760px, calc(100% - 32px)); }
+.news-paper { padding: clamp(12px, 3vw, 24px); background: #fffaf1; color: #26221d; font-family: Batang, 'Noto Serif CJK KR', 'Times New Roman', serif; }
+.news-masthead { margin-bottom: 16px; padding-block: 8px; border-block: 3px double #494138; background: transparent; color: inherit; text-align: center; }
+.news-masthead h3 { margin: 0 0 7px; font-size: clamp(26px, 5vw, 44px); font-weight: 800; letter-spacing: -.05em; }
+.news-edition { display: flex; gap: 4px 12px; flex-wrap: wrap; justify-content: center; margin: 0; padding: 0; font: 12px system-ui, sans-serif; color: #60574d; }
+.news-edition span { margin-left: 0; color: inherit; }
+#news-status:empty { display: none; }
+.monitor-news { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin: 0; padding: 0 !important; list-style: none; }
+.monitor-news li { display: grid; align-content: start; gap: 7px; min-width: 0; padding: 13px 0; border-top: 1px solid #cfc3ad; }
+.monitor-news li + li { margin-top: 0; }
+.monitor-news .news-featured { grid-column: 1 / -1; padding: 0 0 18px; border-top: 0; }
+.news-category { color: #824631; font: 700 12px system-ui, sans-serif; }
+.news-headline { margin: 0; font-size: clamp(16px, 2.7vw, 21px); line-height: 1.35; overflow-wrap: anywhere; }
+.news-featured .news-headline { font-size: clamp(23px, 4.2vw, 34px); letter-spacing: -.035em; }
+.news-paper a { color: #312820; text-decoration-color: #ad8c72; text-underline-offset: 3px; }
+.news-headline a { text-decoration: none; }
+.news-headline a:hover, .news-headline a:focus-visible { text-decoration: underline; }
+.monitor-news .news-summary { margin: 0; line-height: 1.65; font-size: 14px; overflow-wrap: anywhere; }
+.news-summary-label { margin-right: 6px; font: 700 11px system-ui, sans-serif; color: #7b4939; }
+.monitor-news .news-unavailable { gap: 4px; font-size: 12px; }
+.news-paper footer { padding-top: 9px; border-top: 3px double #494138; font: 12px system-ui, sans-serif; }
+@media (max-width: 560px) { .monitor-news { grid-template-columns: minmax(0, 1fr); } }
+.assign-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#open-new-chat { border: 1px solid #5937a1; border-radius: 8px; padding: 8px 14px; color: #5937a1; background: white; text-decoration: none; }
+#assign-picker select { width: 100%; padding: 8px; margin: 4px 0 10px; font: inherit; }
+#assign-picker[hidden], #suni-assignment[hidden] { display: none; }
+.tetris-game { display: grid; justify-items: center; gap: 10px; }
+.tetris-game canvas { display: block; width: min(190px, 100%); height: auto; border: 2px solid #746585; border-radius: 6px; }
+.tetris-controls { display: grid; width: min(300px, 100%); grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.tetris-controls button { padding: 8px 3px; min-height: 44px; }
+.cat-position .office-cat { left: 0; top: 0; transition: none; }
+.room .whiteboard { z-index: 1000; }
+.cat-position > .cat-caption { position: absolute; z-index: 1000; left: 0; bottom: clamp(26px, 4.6vw, 49px); transform: translateX(-50%); white-space: nowrap; background: #fff; color: #271e38; border-radius: 12px; padding: 1px 7px; font-size: clamp(9px, 1.5vw, 12px); pointer-events: none; }
+.cat-position > button.cat-caption { min-height: 24px; padding: 3px 8px; background: #eee2ff; color: #452370; border: 1px solid #b6a1d5; pointer-events: auto; }
+.cat-position > .cat-caption[hidden] { display: none; }
+.cat-position > .briefing-caption { width: max-content; max-width: 185px; white-space: normal; text-align: center; }
+.cat-position > .coffee-chat-caption { max-width: 110px; width: max-content; white-space: normal; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .cat-position { transition: none; } }
+.desk:not(.manager-desk) { border-radius: 4px 4px 2px 2px; background: linear-gradient(#b68b64 0 11px, #78563f 11px 13px, #927055 13px); box-shadow: 0 2px #5e4436, 0 6px 8px #53351e24; }
+.desk:not(.manager-desk)::before { background: repeating-linear-gradient(4deg, transparent 0 3px, #76523b20 4px 5px), linear-gradient(95deg, #dcbc96, #bb9068); }
+.desk:not(.manager-desk)::after { border-inline: clamp(2px, .4vw, 4px) solid #51453c; box-shadow: 3px 4px 6px -3px #30202180; }
+@media (min-width: 901px) {
+  .desk:not(.manager-desk) { width: 20.7%; }
+}
+.desk-role-prop { position: absolute; z-index: 1; bottom: calc(100% - 5px); right: 8%; width: clamp(12px, 2.6vw, 24px); pointer-events: none; }
+.prop-calendar { height: clamp(13px, 2.5vw, 22px); border: 1px solid #876656; border-radius: 2px; background: linear-gradient(#d99489 0 27%, transparent 27%), repeating-linear-gradient(90deg, transparent 0 3px, #b7a49588 3px 4px), repeating-linear-gradient(#fff9e8 0 3px, #ded1bc 3px 4px); box-shadow: 2px 2px #654a39; }
+.prop-files { height: clamp(9px, 1.7vw, 15px); border-radius: 2px; transform: skewX(-9deg); background: linear-gradient(#e5c37c 0 22%, #f6e5b8 22% 31%, #947950 31% 40%, #8faaa2 40% 58%, #e1e9d7 58% 69%, #ba8ea1 69% 89%, #e8c7cd 89%); box-shadow: 1px 2px #603e36; }
+.prop-storyboard { height: clamp(12px, 2.2vw, 20px); border: 1px solid #81576c; border-left-width: 3px; border-radius: 2px; transform: rotate(-8deg); background: linear-gradient(90deg, transparent 45%, #ab8b9c 46% 53%, transparent 54%) center / 85% 75% no-repeat, linear-gradient(transparent 42%, #ab8b9c 43% 54%, transparent 55%) center / 85% 75% no-repeat, #faf0dc; box-shadow: 1px 2px #684d4c; }
+.prop-chief { width: auto; padding: 1px 3px; border: 1px solid #dab367; border-radius: 2px; background: #49323c; box-shadow: 1px 2px #6f4c36; color: #ffe1a0; font-size: clamp(6px, .9vw, 9px); font-weight: 750; line-height: 1.25; white-space: nowrap; }
+.desk:has(.prop-chief) { text-align: left; padding-left: 4px; }
+.prop-chief { top: 13px; bottom: auto; right: 3px; padding-inline: 2px; }
+.laptop { width: clamp(28px, 5.3vw, 54px); height: 9px; border-radius: 2px 2px 4px 4px; background: repeating-linear-gradient(90deg, #30343a 0 2px, #747981 2px 3px) center 1px / 76% 3px no-repeat, linear-gradient(#b0b4bc 76%, #676b74 77%); }
+.laptop::before { height: clamp(15px, 2.5vw, 25px); border: 1px solid #282d34; border-bottom-width: 2px; border-radius: 3px 3px 1px 1px; background: linear-gradient(135deg, #485561, #242c36); box-shadow: inset 0 0 0 1px #ffffff17; }
+.laptop::after { content: ''; position: absolute; bottom: 2px; left: 42%; width: 16%; height: 2px; border-radius: 1px; background: #747b86; }
+@media (max-width: 750px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { position: static; display: flex; flex-wrap: wrap; padding: 8px; }
+  .overview { grid-template-columns: minmax(0, 1fr); }
+  .staff { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .employee { padding: 8px; gap: 6px; }
+  .staff-model { width: 46px; height: 46px; flex-basis: 46px; }
+}
+</style>
+<header><div><strong>AI 캣 오피스</strong><span>업무 데모</span></div></header>
+<div class="workspace">
+<nav class="sidebar" aria-label="업무 메뉴">
+  <a href="#office">오피스</a>
+  <a href="#staff-panel">직원 현황</a>
+  <a href="#work-panel">업무</a>
+  <a href="#report-panel">업무 이력</a>
+</nav>
+<main>
+  <div id="dashboard">
+  <h1>업무 대시보드</h1>
+  <p class="muted" id="connection-status">공개 체험판입니다. 가상 업무와 일정으로 사무실을 체험할 수 있어요.</p>
+  <div class="overview">
+  <section class="office" id="office" aria-labelledby="office-title">
+    <div class="office-heading">
+      <h2 id="office-title">움직이는 사무실</h2>
+      <button type="button" id="office-refresh">새로고침</button>
+    </div>
+    <p class="muted">업무를 맡기면 담당 고양이가 자기 책상으로 이동합니다.</p>
+    <div class="room" id="room" tabindex="-1" role="group" aria-label="사무실" aria-describedby="manager-help">
+      <div class="office-window" id="office-window" aria-hidden="true"><i class="sky-stars"></i><i class="sky-body"></i></div>
+      <div class="office-sunlight" aria-hidden="true"></div>
+      <div class="office-night-lighting" aria-hidden="true"></div>
+      <i class="office-sconce" aria-hidden="true"></i><i class="office-sconce office-sconce-right" aria-hidden="true"></i>
+      <button type="button" class="whiteboard" id="whiteboard" aria-haspopup="dialog">남은 업무<span id="whiteboard-count">0건</span></button>
+      <div class="zone coffee-zone">
+        <i class="coffee-machine"></i><i class="coffee-cup"></i><strong>커피 코너</strong>
+      </div>
+      <div class="zone lounge-zone"><i class="lounge-chair lounge-chair-left"></i><i class="lounge-chair lounge-chair-right"></i><i class="lounge-table"></i><strong>휴게실</strong></div>
+      <div class="zone books-zone">
+        <div class="books" aria-hidden="true">
+          <div class="shelf-row">
+            <i style="--spine-color:#d4a863;--spine-height:91%"></i>
+            <i style="--spine-color:#ae7166;--spine-height:73%"></i>
+            <i style="--spine-color:#7d9a8e"></i>
+            <i style="--spine-color:#b29abe;--spine-height:95%"></i>
+            <i style="--spine-color:#e0b87d;--spine-height:69%"></i>
+            <i style="--spine-color:#8e9bb0;--spine-height:92%"></i>
+            <i style="--spine-color:#946650;--spine-height:80%"></i>
+            <i style="--spine-color:#739492;--spine-height:94%"></i>
+            <i style="--spine-color:#c18e73;--spine-height:78%"></i>
+            <i style="--spine-color:#d1bb88;--spine-height:87%"></i>
+            <i style="--spine-color:#8589ad;--spine-height:96%"></i>
+            <i style="--spine-color:#a47560;--spine-height:75%"></i>
+            <i style="--spine-color:#a7ab86;--spine-height:82%"></i>
+          </div>
+          <div class="shelf-row">
+            <i style="--spine-color:#8392aa;--spine-height:77%"></i>
+            <i style="--spine-color:#c08b72"></i>
+            <i style="--spine-color:#dec298;--spine-height:93%"></i>
+            <i style="--spine-color:#93a17b;--spine-height:69%"></i>
+            <i style="--spine-color:#ab7e99"></i>
+            <i style="--spine-color:#998750;--spine-height:95%"></i>
+            <i style="--spine-color:#c39a7b;--spine-height:81%"></i>
+            <i style="--spine-color:#79849a;--spine-height:92%"></i>
+            <i style="--spine-color:#b58e9d;--spine-height:77%"></i>
+            <i style="--spine-color:#bba26b;--spine-height:91%"></i>
+            <i style="--spine-color:#738a7c;--spine-height:85%"></i>
+            <i style="--spine-color:#a5846d;--spine-height:73%"></i>
+            <i style="--spine-color:#8a80a0;--spine-height:88%"></i>
+          </div>
+        </div>
+        <strong>자료 선반</strong>
+      </div>
+      <span class="manager-key-hint" id="manager-key-hint" hidden></span>
+    </div>
+    <p class="muted" id="manager-help">화면의 방향 버튼으로 사장을 움직일 수 있어요.</p>
+    <div class="manager-controls" role="group" aria-label="사장 이동" aria-describedby="manager-help">
+      <button type="button" data-move="ArrowLeft" aria-label="왼쪽으로 이동">←</button>
+      <button type="button" data-move="ArrowUp" aria-label="위로 이동">↑</button>
+      <button type="button" data-move="ArrowDown" aria-label="아래로 이동">↓</button>
+      <button type="button" data-move="ArrowRight" aria-label="오른쪽으로 이동">→</button>
+    </div>
+    <button type="button" id="manager-interact" disabled>상호작용 (D)</button>
+    <p class="muted" id="manager-activity" role="status">자료 선반, 커피 코너, 휴게실 가까이에서 상호작용할 수 있어요.</p>
+  </section>
+  <section id="staff-panel" aria-labelledby="staff-title">
+    <h2 id="staff-title">AI 직원 현황</h2>
+    <div class="staff" id="staff"></div>
+    <p id="feedback" role="status"></p>
+    <dialog class="task-dialog" id="bori-calendar" aria-labelledby="bori-calendar-title">
+      <div class="office-heading">
+        <h2 id="bori-calendar-title">보리 일정 관리</h2>
+        <button type="button" id="bori-calendar-close">닫기</button>
+      </div>
+      <div class="schedule-toolbar">
+        <button type="button" id="schedule-new">새 일정</button>
+        <button type="button" id="calendar-brief" class="secondary">오늘 일정</button>
+        <button type="button" id="briefing-notification" class="secondary" aria-pressed="false" hidden>브리핑 알림 켜기</button>
+        <button type="button" id="bori-assign" class="secondary">일반 업무</button>
+      </div>
+      <form id="schedule-form" class="schedule-form" hidden>
+        <label>일정 제목 <input name="title" required maxlength="120" placeholder="예: 콘티 회의"></label>
+        <label class="all-day-option"><input type="checkbox" name="allDay"> 하루 종일</label>
+        <label id="schedule-date-field" hidden>날짜 (서울 시간) <input type="date" name="date" required disabled></label>
+        <div id="schedule-time-fields">
+          <label>시작 (서울 시간) <input type="datetime-local" name="start" required></label>
+          <label>종료 (선택) <input type="datetime-local" name="end"></label>
+        </div>
+        <div class="actions">
+          <button type="submit">저장</button>
+          <button type="button" id="schedule-back" class="secondary">닫기</button>
+        </div>
+      </form>
+      <p id="schedule-status" role="status"></p>
+      <ul id="schedule-events" class="schedule-list"></ul>
+    </dialog>
+  </section>
+  </div>
+  <div class="layout">
+    <section aria-labelledby="recent-title">
+      <h2 id="recent-title">최근 업무 이력</h2>
+      <div id="recent-history"></div>
+      <a href="#report-panel">전체 이력 보기</a>
+    </section>
+  </div>
+  </div>
+  <section id="work-panel" aria-labelledby="work-title" hidden>
+    <h1 id="work-title">업무</h1>
+    <div id="work-staff" class="actions" role="group" aria-label="담당 직원 선택"></div>
+    <label for="work-date">주간 조회 기준일</label>
+    <input id="work-date" type="date">
+    <p id="work-week" class="muted"></p>
+    <h2>업무 및 콘티</h2>
+    <div id="employee-work"></div>
+    <h2>주간 업무</h2>
+    <div id="weekly-work"></div>
+  </section>
+  <section id="report-panel" aria-labelledby="reports-title" hidden>
+    <div class="office-heading">
+      <h1 id="reports-title">업무 이력</h1>
+      <button type="button" class="secondary" id="clear-demo-tasks" hidden>데모 업무 모두 삭제</button>
+    </div>
+    <div id="reports"></div>
+  </section>
+</main>
+</div>
+<dialog class="task-dialog" id="pending-dialog" aria-labelledby="pending-title">
+  <div class="task-dialog-heading">
+    <h2 id="pending-title">남은 업무</h2>
+    <form method="dialog"><button class="secondary" autofocus>닫기</button></form>
+  </div>
+  <div id="pending-list"></div>
+</dialog>
+<dialog class="task-dialog" id="bori-briefing" aria-labelledby="bori-briefing-title">
+  <div class="task-dialog-heading">
+    <h2 id="bori-briefing-title">보리의 오늘 일정</h2>
+    <form method="dialog"><button class="secondary" autofocus>닫기</button></form>
+  </div>
+  <p id="briefing-date" class="muted"></p>
+  <ul id="briefing-events" class="schedule-list"></ul>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="desk-menu" aria-labelledby="desk-menu-title">
+  <div class="task-dialog-heading">
+    <h2 id="desk-menu-title">사장 자리</h2>
+    <form method="dialog"><button class="secondary" autofocus>닫기</button></form>
+  </div>
+  <div class="desk-menu-actions">
+    <button type="button" data-desk-action="work">업무진행</button>
+    <button type="button" data-desk-action="break">월급루팡</button>
+    <button type="button" data-desk-action="review">결재확인</button>
+    <button type="button" data-desk-action="schedule">일정 확인</button>
+  </div>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="job-automation" aria-labelledby="job-automation-title">
+  <div class="task-dialog-heading">
+    <h2 id="job-automation-title">루루 반복 업무</h2>
+    <form method="dialog"><button class="secondary">닫기</button></form>
+  </div>
+  <form class="schedule-form" id="job-automation-form">
+    <label>반복 요청 <input name="request" required maxlength="120" placeholder="매일 오전 9시에 채용공고 조사해줘."></label>
+    <label>코코 검토 조건 (선택) <input name="keywords" maxlength="120" placeholder="예: 서울, 정규직"></label>
+    <label>최종 학력
+      <select name="education">
+        <option value="">미입력</option><option value="0">고졸 이하</option><option value="1">전문학사</option>
+        <option value="2">학사</option><option value="3">석사</option><option value="4">박사</option>
+      </select>
+    </label>
+    <label>관련 경력 (년) <input name="experience" type="number" min="0" max="60" step="0.5" placeholder="예: 2 또는 신입은 0"></label>
+    <p class="muted">학력과 경력은 이 브라우저에 저장돼요. 코코가 원문의 명확한 학력·경력 요건을 비교하고, 자격증·전공·직무별 조건 등 추가 확인이 필요하면 일정 등록을 보류해요.</p>
+    <p class="muted">캣 오피스를 열어 두면 예약 시각에 실행해요. 공개 잡알리오 공공기관 목록 첫 페이지에서 쉼표로 나눈 조건을 모두 충족하는 공고를 최대 5건 선별해요.</p>
+    <div class="actions">
+      <button type="submit">예약 저장</button>
+      <button type="button" id="job-automation-pause" class="secondary" hidden>일시정지</button>
+      <button type="button" id="job-automation-run" class="secondary" hidden>지금 조사</button>
+    </div>
+  </form>
+  <p id="job-automation-status" role="status"></p>
+  <ul id="job-automation-report" class="schedule-list"></ul>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="slacking-menu" aria-labelledby="slacking-title">
+  <div class="task-dialog-heading">
+    <h2 id="slacking-title">월급루팡</h2>
+    <form method="dialog"><button class="secondary" autofocus>닫기</button></form>
+  </div>
+  <div class="desk-menu-actions">
+    <button type="button" data-slacking="game">게임</button>
+    <button type="button" data-slacking="ott">OTT</button>
+  </div>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="stock-dialog" aria-labelledby="stock-title">
+  <div class="task-dialog-heading">
+    <h2 id="stock-title">주식</h2><button type="button" class="secondary" data-back-slacking>뒤로</button>
+  </div>
+  <p id="stock-status" class="muted" role="status"></p>
+  <ul id="stock-quotes" class="stock-quotes"></ul>
+  <p><a href="https://m.stock.naver.com/" target="_blank" rel="noopener noreferrer">네이버페이 증권에서 종목 더 보기</a></p>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="news-dialog" aria-labelledby="news-title">
+  <div class="task-dialog-heading">
+    <h2 id="news-title">오늘 뉴스</h2><button type="button" class="secondary" data-back-slacking>뒤로</button>
+  </div>
+  <div class="news-paper">
+    <header class="news-masthead">
+      <h3>오늘의 신문</h3>
+      <div class="news-edition"><time id="news-edition-date"></time><span>기사 제공 · 뉴시스</span></div>
+    </header>
+    <p id="news-status" role="status"></p>
+    <ul id="news-headlines" class="monitor-news"></ul>
+    <footer><a href="https://www.newsis.com/" target="_blank" rel="noopener noreferrer">뉴시스에서 더 보기</a></footer>
+  </div>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="ott-dialog" aria-labelledby="ott-title">
+  <div class="task-dialog-heading">
+    <h2 id="ott-title">OTT</h2><button type="button" class="secondary" data-back-slacking>뒤로</button>
+  </div>
+  <div class="monitor-links">
+    <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">유튜브</a>
+    <a href="https://www.netflix.com/kr/" target="_blank" rel="noopener noreferrer">넷플릭스</a>
+    <a href="https://www.tving.com/" target="_blank" rel="noopener noreferrer">티빙</a>
+  </div>
+</dialog>
+<dialog class="task-dialog" id="review-dialog" aria-labelledby="review-title">
+  <div class="task-dialog-heading">
+    <h2 id="review-title">결재 요청</h2>
+    <form method="dialog"><button class="secondary" autofocus>닫기</button></form>
+  </div>
+  <div id="review-report"></div>
+</dialog>
+<dialog class="task-dialog" id="assign-dialog" aria-labelledby="assign-title">
+  <div class="task-dialog-heading">
+    <h2 id="assign-title">업무 맡기기</h2>
+    <form method="dialog"><button class="secondary">닫기</button></form>
+  </div>
+  <p id="assign-employee" class="badge"></p>
+  <form id="assignment">
+    <label id="assign-picker" hidden>담당자
+      <select id="assign-select" disabled><option value="">담당자 선택</option></select>
+    </label>
+    <label for="request">업무 내용</label>
+    <textarea id="request" required maxlength="500" autofocus placeholder="예: 팀 회의 안건을 정리해 줘"></textarea>
+    <label id="suni-assignment" hidden><input id="suni-manual" type="checkbox"> SUNI 채팅에서 받은 답변을 이 업무에 등록</label>
+    <div class="assign-actions">
+      <button type="submit">업무 맡기기</button>
+      <a id="open-new-chat" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" hidden>새 업무</a>
+    </div>
+  </form>
+</dialog>
+<dialog class="task-dialog monitor-dialog" id="tetris-dialog" aria-labelledby="tetris-title">
+  <div class="task-dialog-heading">
+    <h2 id="tetris-title">테트리스</h2>
+    <button type="button" class="secondary" data-back-slacking autofocus>뒤로</button>
+  </div>
+  <div class="tetris-game">
+    <p id="tetris-status" role="status">지운 줄 0</p>
+    <canvas width="200" height="400" aria-label="테트리스 게임판"></canvas>
+    <div class="tetris-controls">
+      <button type="button" data-tetris="left" aria-label="왼쪽">←</button>
+      <button type="button" data-tetris="rotate" aria-label="회전">↻</button>
+      <button type="button" data-tetris="down" aria-label="내리기">↓</button>
+      <button type="button" data-tetris="right" aria-label="오른쪽">→</button>
+    </div>
+    <button type="button" id="tetris-reset" class="secondary">다시 시작</button>
+  </div>
+</dialog>
+<script src="office-cat.js"></script>
+<script defer src="calendar-ui.js"></script>
+
+<script>
+const employees = {
+  coco: ['코코', '비서실장', '업무를 우선순위별로 나누고 담당자를 제안합니다.'],
+  lulu: ['루루', '조사 담당', '조사 질문과 확인할 자료 목록을 제안합니다.'],
+  mango: ['망고', '콘텐츠 기획 담당', 'SUNI 웹툰 기획안에 한 줄 소개, 주요 인물, 회차별 사건, 다음 화로 이어지는 장면을 정리하는 구성을 제안합니다.'],
+  bori: ['보리', '일정·운영 담당', '준비, 실행, 점검 순서로 할 일 목록을 제안합니다.']
+};
+const labels = { queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
+const storageKey = 'cat-office-public-demo-tasks';
+let tasks = [];
+try {
+  tasks = JSON.parse(localStorage.getItem(storageKey) || '[]');
+  for (const task of tasks) {
+    if (task.ai && ['queued', 'running'].includes(task.status)) {
+      task.status = 'cancelled';
+      task.history.push('외부 AI 실행이 비활성화되어 업무가 취소되었습니다.');
+    } else if (task.status === 'running' && !task.suniManual) {
+      task.status = 'queued';
+    }
+  }
+} catch {
+  tasks = [];
+}
+const whiteboard = document.querySelector('#whiteboard');
+const pendingDialog = document.querySelector('#pending-dialog');
+const reviewDialog = document.querySelector('#review-dialog');
+const reviewReport = document.querySelector('#review-report');
+let reviewTask;
+const pendingList = document.querySelector('#pending-list');
+let pendingReviewsOnly = false;
+function openPending(reviewsOnly = false) {
+  pendingDialog.classList.toggle('monitor-dialog', reviewsOnly);
+  pendingReviewsOnly = reviewsOnly;
+  document.querySelector('#pending-title').textContent = reviewsOnly ? '결재확인' : '남은 업무';
+  renderPending();
+  pendingDialog.showModal();
+}
+whiteboard.addEventListener('click', () => openPending());
+const form = document.querySelector('#assignment');
+const request = document.querySelector('#request');
+const assignDialog = document.querySelector('#assign-dialog');
+const assignBadge = document.querySelector('#assign-employee');
+const assignPicker = document.querySelector('#assign-picker');
+const assignSelect = document.querySelector('#assign-select');
+const suniAssignment = document.querySelector('#suni-assignment');
+const newChat = document.querySelector('#open-new-chat');
+for (const [id, [name, role]] of Object.entries(employees)) {
+  assignSelect.add(new Option(name + ' · ' + role, id));
+}
+let assignee;
+function openAssignment(id) {
+  assignDialog.classList.toggle('monitor-dialog', !id);
+  assignee = id;
+  form.reset();
+  assignBadge.hidden = !id;
+  assignBadge.textContent = id ? employees[id].slice(0, 2).join(' · ') : '';
+  assignPicker.hidden = !!id;
+  assignSelect.disabled = !!id;
+  assignSelect.required = !id;
+  suniAssignment.hidden = true;
+  newChat.hidden = !!id;
+  assignDialog.showModal();
+  if (!id) assignSelect.focus();
+}
+assignDialog.addEventListener('close', () => {
+  const returnTo = assignee ? staff.querySelector('[data-employee="' + assignee + '"]') : room;
+  returnTo?.focus({ preventScroll: true });
+});
+const feedback = document.querySelector('#feedback');
+const reports = document.querySelector('#reports');
+const dashboard = document.querySelector('#dashboard');
+const workPanel = document.querySelector('#work-panel');
+const reportPanel = document.querySelector('#report-panel');
+const workDate = document.querySelector('#work-date');
+const workStaff = document.querySelector('#work-staff');
+const taskDate = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' });
+const today = new Date();
+const todayValue = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
+  .map(part => String(part).padStart(2, '0')).join('-');
+workDate.value = todayValue;
+let selectedEmployee = Object.keys(employees)[0];
+for (const [id, [name]] of Object.entries(employees)) {
+  const button = element('button', name, 'secondary');
+  button.dataset.employee = id;
+  button.onclick = () => { selectedEmployee = id; renderWork(); };
+  workStaff.append(button);
+}
+workDate.addEventListener('change', renderWork);
+function showPanel() {
+  const hash = location.hash;
+  workPanel.hidden = hash !== '#work-panel';
+  reportPanel.hidden = hash !== '#report-panel';
+  dashboard.hidden = !workPanel.hidden || !reportPanel.hidden;
+  for (const link of document.querySelectorAll('.sidebar a')) {
+    if (link.hash === (hash || '#office')) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  if (hash) document.getElementById(hash === '#assign-panel' ? 'staff-panel' : hash.slice(1))?.scrollIntoView();
+}
+window.addEventListener('hashchange', showPanel);
+const staff = document.querySelector('#staff');
+const room = document.querySelector('#room');
+document.querySelector('#office-refresh').addEventListener('click', () => {
+  room.focus({ preventScroll: true });
+  location.reload();
+});
+window.addEventListener('pageshow', event => {
+  const reloaded = performance.getEntriesByType('navigation')[0]?.type === 'reload';
+  if (!event.persisted && reloaded) {
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body || document.activeElement === room) {
+        room.focus({ preventScroll: true });
+        room.closest('#office').scrollIntoView({ block: 'start', behavior: 'instant' });
+      }
+    });
+  } else if (document.activeElement === document.body) {
+    room.focus({ preventScroll: true });
+  }
+});
+const officeCats = new Map();
+let briefingVisit;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const coffeeChats = [
+  ['안녕! 커피 마시러 왔어?', '응, 잠깐 쉬어 가려고.'],
+  ['오늘 커피 향 좋다.', '그러게. 나도 한 잔 더 마실까?'],
+  ['요즘 뭐 재밌는 거 있어?', '일단 지금 이 커피가 제일 좋아.']
+];
+let coffeeChat;
+const passingGreetings = new Set();
+const leisureSpots = [
+  { x: 12, y: 89, pose: 'coffee', label: '커피 코너' },
+  { x: 24, y: 89, pose: 'coffee', label: '커피 코너' },
+  { x: 44, y: 79, pose: 'relaxing', label: '휴게실' },
+  { x: 56, y: 79, pose: 'relaxing', label: '휴게실' },
+  { x: 9, y: 47, pose: 'idle', label: '창가 통로' },
+  { x: 50, y: 55, pose: 'idle', label: '중앙 통로' },
+  { x: 91, y: 48, pose: 'idle', label: '오른쪽 통로' },
+  { x: 83, y: 71, pose: 'idle', label: '자료 선반 앞' }
+];
+const managerDesk = element('div', '', 'desk manager-desk');
+managerDesk.style.setProperty('--desk-x', '50%');
+managerDesk.style.setProperty('--desk-y', '24%');
+for (const part of ['manager-monitor', 'manager-mouse']) {
+  const accessory = element('i', '', part);
+  accessory.setAttribute('aria-hidden', 'true');
+  managerDesk.append(accessory);
+}
+managerDesk.append(element('span', '사장', 'manager-nameplate'));
+const manager = element('div', '', 'office-cat manager');
+const managerModel = element('canvas', '', 'office-model');
+managerModel.width = 128;
+managerModel.height = 148;
+const managerLine = element('span', '', 'manager-line');
+managerLine.hidden = true;
+managerLine.setAttribute('aria-hidden', 'true');
+manager.append(managerModel, managerLine);
+manager.style.setProperty('--cat-x', '50%');
+manager.style.setProperty('--cat-y', 'calc(24% - clamp(20px, 3vw, 36px))');
+const managerContext = managerModel.getContext('2d');
+drawOfficeCat(managerContext, 'manager', 'resting', '', 0);
+room.append(manager, managerDesk);
+
+const managerMoves = new Map([
+  ['ArrowLeft', [-1, 0]], ['ArrowUp', [0, -1]],
+  ['ArrowDown', [0, 1]], ['ArrowRight', [1, 0]]
+]);
+const managerControls = document.querySelector('.manager-controls');
+let managerWalkUntil = 0;
+let managerWalking = false;
+let managerDirection = 'right';
+const heldManagerKeys = new Set();
+const managerInteract = document.querySelector('#manager-interact');
+const managerKeyHint = document.querySelector('#manager-key-hint');
+const managerActivity = document.querySelector('#manager-activity');
+const deskMenu = document.querySelector('#desk-menu');
+const managerSpots = [
+  { zone: managerDesk, action: '사장 자리 앉기', pose: 'desk' },
+  { zone: room.querySelector('.books-zone'), shelfFront: true, action: '자료 읽기', pose: 'reading' },
+  { zone: room.querySelector('.coffee-zone'), frontOnly: true, action: '커피 마시기', pose: 'coffee',
+    message: '사장이 커피를 마시고 있어요.' },
+  { zone: room.querySelector('.lounge-zone'), rugOnly: true, action: '앉아서 쉬기', pose: 'resting',
+    message: '사장이 휴게실에서 쉬고 있어요.' }
+];
+let nearbyManagerSpot;
+let managerPose = 'resting';
+let drawnManagerPose = 'resting';
+let coffeeStartedAt = null;
+let reading;
+const readingDuration = 2600;
+const shelfFiles = [
+  { title: '오늘 일정표', line: '오늘 회의는 오후 2시. 보리한테 알려줘야겠다.' },
+  { title: '회의 메모', line: '이건 코코한테 물어봐야겠다.' },
+  { title: '업무 체크리스트', line: '시장 조사 항목은 루루한테 확인해야겠다.' }
+];
+let managerLineUntil = 0;
+const coffeeLines = ['맛있다!', '카페인 수혈 완료!', '월루하고싶다.'];
+const restLines = ['잠깐 쉬어야지.', '아, 편하다!', '한숨 돌리자.'];
+
+function showManagerLine(lines, time) {
+  const line = lines[Math.floor(Math.random() * lines.length)];
+  managerActivity.textContent = line;
+  managerLine.textContent = line;
+  managerLine.hidden = false;
+  managerLineUntil = time + 2500;
+}
+
+function interactWithManagerSpot() {
+  if (!nearbyManagerSpot || coffeeStartedAt !== null || reading) return;
+  managerWalkUntil = 0;
+  managerLine.hidden = true;
+  if (nearbyManagerSpot.pose === 'desk') {
+    heldManagerKeys.clear();
+    manager.style.setProperty('--cat-x', '50%');
+    manager.style.setProperty('--cat-y', 'calc(24% - clamp(20px, 3vw, 36px))');
+    managerPose = 'resting';
+    managerActivity.textContent = '';
+    deskMenu.showModal();
+    return;
+  }
+  managerPose = nearbyManagerSpot.pose;
+  if (managerPose === 'coffee') coffeeStartedAt = performance.now();
+  if (managerPose === 'reading') {
+    const file = shelfFiles[Math.floor(Math.random() * shelfFiles.length)];
+    reading = { file, startedAt: performance.now() };
+    managerActivity.textContent = '데모 자료 · ' + file.title + ' 읽는 중';
+  } else {
+    managerActivity.textContent = nearbyManagerSpot.message;
+  }
+  if (managerPose === 'resting') showManagerLine(restLines, performance.now());
+}
+managerInteract.addEventListener('click', interactWithManagerSpot);
+deskMenu.querySelector('.desk-menu-actions').addEventListener('click', event => {
+  const action = event.target.closest('[data-desk-action]')?.dataset.deskAction;
+  if (!action) return;
+  deskMenu.close();
+  if (action === 'work') openAssignment();
+  else if (action === 'break') openSlacking();
+  else if (action === 'review') openPending(true);
+  else {
+    const calendar = document.querySelector('#bori-calendar');
+    calendar.classList.add('monitor-dialog');
+    calendar.addEventListener('close', () => calendar.classList.remove('monitor-dialog'), { once: true });
+    calendar.showModal();
+  }
+});
+
+function moveManager(dx, dy, distance = 10) {
+  const bounds = managerModel.getBoundingClientRect();
+  const floor = room.getBoundingClientRect();
+  const x = bounds.left + bounds.width / 2 - floor.left;
+  const y = bounds.top + bounds.height / 2 - floor.top;
+  const nextX = Math.max(bounds.width / 2, Math.min(floor.width - bounds.width / 2, x + dx * distance));
+  const nextY = Math.max(floor.height * .24 - bounds.height * (131 / 148 - .5),
+    Math.min(floor.height - bounds.height / 2, y + dy * distance));
+  if (Math.abs(nextX - x) + Math.abs(nextY - y) < .01) return;
+  coffeeStartedAt = null;
+  reading = undefined;
+  managerLine.hidden = true;
+  if (managerPose !== 'idle' || managerActivity.textContent !== '') {
+    managerPose = 'idle';
+    managerActivity.textContent = '';
+  }
+  manager.style.setProperty('--cat-x', (nextX / floor.width * 100) + '%');
+  manager.style.setProperty('--cat-y', (nextY / floor.height * 100) + '%');
+  if (dx) managerDirection = dx < 0 ? 'left' : 'right';
+  managerWalkUntil = performance.now() + 170;
+}
+
+managerControls.addEventListener('click', event => {
+  const button = event.target.closest('button[data-move]');
+  if (button) moveManager(...managerMoves.get(button.dataset.move));
+});
+document.addEventListener('keydown', event => {
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (event.defaultPrevented || event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
+  if (event.code === 'KeyD' && nearbyManagerSpot) {
+    event.preventDefault();
+    if (!event.repeat) interactWithManagerSpot();
+    return;
+  }
+  if (!managerMoves.has(event.key)) return;
+  event.preventDefault();
+  if (!event.repeat) {
+    heldManagerKeys.add(event.key);
+    moveManager(...managerMoves.get(event.key), 3);
+  }
+});
+document.addEventListener('keyup', event => heldManagerKeys.delete(event.key));
+window.addEventListener('blur', () => heldManagerKeys.clear());
+document.addEventListener('visibilitychange', () => heldManagerKeys.clear());
+document.addEventListener('focusin', event => {
+  if (event.target.closest('input, textarea, select, [contenteditable], dialog')) heldManagerKeys.clear();
+});
+
+function element(tag, content, className) {
+  const node = document.createElement(tag);
+  node.textContent = content;
+  if (className) node.className = className;
+  return node;
+}
+
+const staffPortraits = new Map();
+function makePortrait(id) {
+  if (staffPortraits.has(id)) return staffPortraits.get(id);
+  const model = document.createElement('canvas');
+  model.width = 128;
+  model.height = 148;
+  drawOfficeCat(model.getContext('2d'), id, 'portrait', '', 0);
+  const portrait = element('canvas', '', 'staff-model');
+  portrait.width = portrait.height = 96;
+  portrait.setAttribute('aria-hidden', 'true');
+  portrait.getContext('2d').drawImage(model, 20, 9, 88, 88, 0, 0, 96, 96);
+  staffPortraits.set(id, portrait);
+  return portrait;
+}
+
+function positionCat(cat, x, y) {
+  if (x !== cat.x) cat.marker.dataset.direction = x < cat.x ? 'left' : 'right';
+  cat.x = x;
+  cat.position.style.setProperty('--cat-x', x + '%');
+  cat.position.style.setProperty('--cat-y', typeof y === 'number' ? y + '%' : y);
+}
+
+
+const deskProps = {
+  coco: ['chief', '비서실장 명패'],
+  lulu: ['files', '쌓인 서류철'],
+  mango: ['storyboard', '콘티 노트'],
+  bori: ['calendar', '탁상 달력']
+};
+
+for (const [index, [id, [name]]] of Object.entries(employees).entries()) {
+  const deskX = index % 2 === 0 ? 29 : 71;
+  const deskY = index < 2 ? 34 : 56;
+  const desk = element('div', name + ' 책상', 'desk');
+  desk.style.setProperty('--desk-x', deskX + '%');
+  desk.style.setProperty('--desk-y', deskY + '%');
+  desk.append(element('i', '', 'laptop'));
+  const [propType, propLabel] = deskProps[id];
+  const prop = element('span', id === 'coco' ? '비서실장' : '', 'desk-role-prop prop-' + propType);
+  prop.setAttribute('role', 'img');
+  prop.setAttribute('aria-label', propLabel);
+  desk.append(prop);
+  const chair = element('div', '', 'chair');
+  chair.style.setProperty('--desk-x', deskX + '%');
+  chair.style.setProperty('--desk-y', deskY + '%');
+  const marker = element('div', '', 'office-cat');
+  const canvas = element('canvas', '', 'office-model');
+  canvas.width = 128;
+  canvas.height = 148;
+  const context = canvas.getContext('2d');
+  const caption = element('span', name, 'cat-caption');
+  const reviewButton = element('button', '결재 요청', 'cat-caption');
+  reviewButton.type = 'button';
+  reviewButton.hidden = true;
+  reviewButton.setAttribute('aria-label', name + ' 결재 요청');
+  reviewButton.setAttribute('aria-haspopup', 'dialog');
+  const position = element('div', '', 'cat-position');
+  marker.append(canvas);
+  position.append(marker, caption, reviewButton);
+  const cat = { id, context, position, marker, caption, reviewButton, desk, deskX, deskY, leisureSpot: leisureSpots[index], name, task: null, restTimer: null };
+  reviewButton.onclick = () => {
+    if (cat.task?.status !== 'review') return;
+    reviewTask = cat.task;
+    reviewReport.replaceChildren(renderTaskCard(reviewTask, 'review'));
+    reviewDialog.showModal();
+  };
+  pauseAtLeisureSpot(cat);
+  officeCats.set(id, cat);
+  room.append(chair, desk, position);
+}
+
+let lastFrame = 0;
+const coffeeCounter = room.querySelector('.coffee-zone');
+
+function routeAroundFurniture(from, target, obstacles, floor) {
+  const intersects = ([ax, ay], [bx, by], bounds) => {
+    let enter = 0;
+    let exit = 1;
+    for (const [start, end, min, max] of [
+      [ax, bx, bounds.left, bounds.right], [ay, by, bounds.top, bounds.bottom]
+    ]) {
+      if (start === end) {
+        if (start < min || start > max) return false;
+        continue;
+      }
+      const first = (min - start) / (end - start);
+      const last = (max - start) / (end - start);
+      enter = Math.max(enter, Math.min(first, last));
+      exit = Math.min(exit, Math.max(first, last));
+      if (enter > exit) return false;
+    }
+    return true;
+  };
+  const contains = (point, bounds) => intersects(point, point, bounds);
+  const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const safe = point => point[0] >= 0 && point[0] <= floor.width && point[1] >= 0 && point[1] <= floor.height
+    && !obstacles.some(bounds => contains(point, bounds));
+  const clear = (a, b) => !obstacles.some(bounds => intersects(a, b, bounds));
+  const corners = obstacles.flatMap(({ left, right, top, bottom }) => [
+    [left - 1, top - 1], [right + 1, top - 1], [left - 1, bottom + 1], [right + 1, bottom + 1]
+  ]).filter(safe);
+  function nearestOpen(point) {
+    if (safe(point)) return point;
+    const projections = obstacles.flatMap(({ left, right, top, bottom }) => [
+      [left - 1, point[1]], [right + 1, point[1]], [point[0], top - 1], [point[0], bottom + 1]
+    ]);
+    return [...projections, ...corners].filter(candidate => safe(candidate) &&
+      !obstacles.some(bounds => !contains(point, bounds) && intersects(point, candidate, bounds)))
+      .sort((a, b) => distance(point, a) - distance(point, b))[0];
+  }
+  const start = nearestOpen(from);
+  const end = nearestOpen(target);
+  if (!start || !end) return [];
+  const exit = start === from ? [] : [start];
+  if (clear(start, end)) return [...exit, end];
+  const points = [start, end, ...corners];
+  const costs = points.map(() => Infinity);
+  const previous = [];
+  const unvisited = new Set(points.keys());
+  costs[0] = 0;
+  while (unvisited.size) {
+    const current = [...unvisited].reduce((best, index) => costs[index] < costs[best] ? index : best);
+    if (!Number.isFinite(costs[current])) return [];
+    if (current === 1) break;
+    unvisited.delete(current);
+    for (const next of unvisited) {
+      const cost = costs[current] + distance(points[current], points[next]);
+      if (cost >= costs[next] || !clear(points[current], points[next])) continue;
+      costs[next] = cost;
+      previous[next] = current;
+    }
+  }
+  const path = [];
+  for (let index = 1; index !== 0; index = previous[index]) path.unshift(points[index]);
+  return [...exit, ...path];
+}
+
+function walkOfficeCat(cat, x, y, onArrival, leisurely = false) {
+  const floor = room.getBoundingClientRect();
+  if (!floor.width) {
+    cat.restTimer = setTimeout(() => walkOfficeCat(cat, x, y, onArrival, leisurely), 500);
+    return;
+  }
+  const width = floor.width;
+  const height = floor.height;
+  const anchor = cat.position.getBoundingClientRect();
+  const model = cat.context.canvas.getBoundingClientRect();
+  const feetOffset = model.height * (131 / 148 - .5);
+  const sideClearance = Math.max(4, model.width * .10);
+  const from = [anchor.left - floor.left, anchor.top - floor.top + feetOffset];
+  const target = [width * x / 100, height * y / 100 + feetOffset];
+  const furniture = room.querySelectorAll('.desk, .chair, .coffee-zone, .books, .lounge-table, .lounge-chair');
+  const obstacles = Array.from(furniture, piece => {
+    const bounds = piece.getBoundingClientRect();
+    const desk = piece.classList.contains('desk');
+    const chair = piece.classList.contains('chair');
+    const coffee = piece === coffeeCounter;
+    return {
+      left: bounds.left - floor.left - sideClearance, right: bounds.right - floor.left + sideClearance,
+      top: (chair ? bounds.bottom - 13 : bounds.top - (coffee ? 7 : 3)) - floor.top,
+      bottom: bounds.bottom - floor.top + (desk ? 11 : 3)
+    };
+  });
+  const exit = cat.seatedAtDesk ? [width * cat.deskX / 100, height * cat.deskY / 100 - 19] : null;
+  cat.seatedAtDesk = false;
+  const route = routeAroundFurniture(exit || from, target, obstacles, floor);
+  if (!route.length) {
+    cat.marker.dataset.motion = 'idle';
+    return false;
+  }
+  if (exit) route.unshift(exit);
+  if (reducedMotion.matches) {
+    const [endX, endY] = route.at(-1);
+    positionCat(cat, endX * 100 / width, (endY - feetOffset) * 100 / height);
+    onArrival();
+    return true;
+  }
+  const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const total = route.reduce((sum, point, index) => sum + distance(index ? route[index - 1] : from, point), 0);
+  let last = from;
+  function next() {
+    const point = route.shift();
+    if (!point) {
+      cat.position.style.removeProperty('--cat-travel-duration');
+      onArrival();
+      return;
+    }
+    const length = distance(last, point);
+    const speed = leisurely ? .045 : Math.max(total, 1) / 900;
+    const duration = Math.max(1, Math.round(length / speed));
+    const property = leisurely ? '--stroll-duration' : '--cat-travel-duration';
+    cat.position.style.setProperty(property, duration + 'ms');
+    positionCat(cat, point[0] * 100 / width, (point[1] - feetOffset) * 100 / height);
+    last = point;
+    cat.restTimer = setTimeout(next, duration);
+  }
+  next();
+  return true;
+}
+
+function animateOffice(time) {
+  requestAnimationFrame(animateOffice);
+  if (time - lastFrame < 40) return;
+  const elapsed = Math.min(time - lastFrame, 60);
+  lastFrame = time;
+  let dx = 0;
+  let dy = 0;
+  for (const key of heldManagerKeys) {
+    const [x, y] = managerMoves.get(key);
+    dx += x;
+    dy += y;
+  }
+  if (dx || dy) moveManager(dx, dy, elapsed * .18 / Math.hypot(dx, dy));
+  const roomTop = room.getBoundingClientRect().top;
+  const managerBounds = managerModel.getBoundingClientRect();
+  const feetX = managerBounds.left + managerBounds.width / 2;
+  const feetY = managerBounds.top + managerBounds.height * 131 / 148;
+  manager.style.zIndex = Math.round(feetY - roomTop);
+  let closestSpot;
+  let closestDistance = 18;
+  for (const spot of managerSpots) {
+    const bounds = spot.zone.getBoundingClientRect();
+    const horizontalGap = Math.max(bounds.left - feetX, feetX - bounds.right, 0);
+    if (spot.frontOnly && (horizontalGap > 18 || feetY < bounds.bottom + 8)) continue;
+    if (spot.shelfFront && (horizontalGap > 0 || feetY < bounds.top + bounds.height / 2)) continue;
+    if (spot.rugOnly) {
+      const rugX = (feetX - bounds.left - bounds.width / 2) / (bounds.width / 2);
+      const rugY = (feetY - bounds.top - bounds.height / 2) / (bounds.height / 2);
+      // The rug gradient ends at 66% of the farthest-corner radius.
+      if (Math.hypot(rugX, rugY) > .66 * Math.SQRT2) continue;
+    }
+    const verticalGap = Math.max(bounds.top - feetY, feetY - bounds.bottom, 0);
+    const distance = spot.frontOnly ? 0 : Math.hypot(horizontalGap, verticalGap);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestSpot = spot;
+    }
+  }
+  if (closestSpot !== nearbyManagerSpot) {
+    nearbyManagerSpot = closestSpot;
+    managerInteract.disabled = !closestSpot;
+    managerInteract.textContent = closestSpot ? closestSpot.action + ' (D)' : '상호작용 (D)';
+    managerKeyHint.hidden = !closestSpot;
+    managerKeyHint.textContent = closestSpot ? 'D · ' + closestSpot.action : '';
+  }
+  const walking = time < managerWalkUntil;
+  const coffeeElapsed = coffeeStartedAt === null ? 0 : Math.max(0, time - coffeeStartedAt);
+  if (coffeeElapsed >= 1650) {
+    coffeeStartedAt = null;
+    managerPose = 'idle';
+    showManagerLine(coffeeLines, time);
+  }
+  const readingElapsed = reading ? Math.max(0, time - reading.startedAt) : 0;
+  if (reading && readingElapsed >= readingDuration) {
+    showManagerLine([reading.file.line], time);
+    reading = undefined;
+    managerPose = 'idle';
+  }
+  if (!managerLine.hidden && time >= managerLineUntil) managerLine.hidden = true;
+  if (walking || managerWalking || coffeeStartedAt !== null || reading || drawnManagerPose !== managerPose) {
+    const sip = coffeeStartedAt === null ? 0 : Math.min(1, coffeeElapsed / 450, (1650 - coffeeElapsed) / 450);
+    const gesture = reading ? Math.min(1, readingElapsed / 650) : sip;
+    drawOfficeCat(managerContext, 'manager', walking ? 'walking' : managerPose, managerDirection,
+      reducedMotion.matches ? 0 : time, reducedMotion.matches && (reading || sip > 0) ? 1 : gesture);
+    drawnManagerPose = managerPose;
+  }
+  managerWalking = walking;
+  const deskDepths = [managerDesk, ...Array.from(officeCats.values(), cat => cat.desk)]
+    .map(desk => [desk, Math.round(desk.getBoundingClientRect().bottom - roomTop + 12)]);
+  const counterDepth = Math.round(coffeeCounter.getBoundingClientRect().bottom - roomTop + 4);
+  const catDepths = Array.from(officeCats.values(), cat => {
+    const bounds = cat.context.canvas.getBoundingClientRect();
+    return [cat.marker, Math.round(bounds.top + bounds.height * 131 / 148 - roomTop)];
+  });
+  greetPassingEmployees();
+  for (const [object, depth] of [...deskDepths, [coffeeCounter, counterDepth], ...catDepths]) {
+    if (object.style.zIndex !== String(depth)) object.style.zIndex = depth;
+  }
+  for (const cat of officeCats.values()) {
+    const motion = cat.marker.dataset.motion || 'idle';
+    const direction = cat.marker.dataset.direction;
+    if (motion === cat.lastMotion && motion !== 'working' && motion !== 'walking') continue;
+    const animationTime = cat.marker.hasAttribute('data-strolling') ? time * .55 : time;
+    drawOfficeCat(cat.context, cat.id, motion, direction, reducedMotion.matches ? 0 : animationTime);
+    cat.lastMotion = motion;
+  }
+}
+requestAnimationFrame(animateOffice);
+
+function greetPassingEmployees() {
+  if (document.hidden || !room.clientWidth) return;
+  const walkers = [...officeCats.values()].filter(cat => cat.marker.dataset.motion === 'walking' &&
+    !cat.caption.hidden && !cat.caption.classList.contains('briefing-caption'));
+  const nearby = new Set();
+  const positions = walkers.map(cat => cat.position.getBoundingClientRect());
+  for (const [index, first] of walkers.entries()) {
+    for (let other = index + 1; other < walkers.length; other++) {
+      const second = walkers[other];
+      const a = positions[index];
+      const b = positions[other];
+      const pair = first.id + ':' + second.id;
+      const distance = Math.hypot(a.left - b.left, a.top - b.top);
+      if (distance > (passingGreetings.has(pair) ? 56 : 35)) continue;
+      nearby.add(pair);
+      if (passingGreetings.has(pair) || first.greetUntil > lastFrame || second.greetUntil > lastFrame) continue;
+      for (const cat of [first, second]) {
+        const previous = cat.caption.textContent;
+        const greeting = cat.name + ' · 안녕!';
+        cat.greetUntil = lastFrame + 3600;
+        cat.caption.textContent = greeting;
+        setTimeout(() => {
+          if (cat.caption.textContent === greeting) cat.caption.textContent = previous;
+        }, 1200);
+      }
+    }
+  }
+  passingGreetings.clear();
+  for (const pair of nearby) passingGreetings.add(pair);
+}
+
+function updateOffice(id, task) {
+  const cat = officeCats.get(id);
+  if (cat.task === task && cat.taskStatus === task?.status) return;
+  stopCoffeeChat(cat);
+  if (id === 'bori' && briefingVisit) briefingVisit = undefined;
+  clearTimeout(cat.restTimer);
+  cat.position.style.removeProperty('--cat-travel-duration');
+  cat.marker.removeAttribute('data-strolling');
+  cat.task = task;
+  cat.taskStatus = task?.status;
+  if (task) cat.leisureSpot = null;
+  cat.desk.dataset.active = 'false';
+  cat.caption.hidden = false;
+  cat.caption.classList.remove('briefing-caption');
+  cat.reviewButton.hidden = true;
+  const [name] = employees[id];
+  const walkToSeat = arrive => {
+    const seat = 'calc(' + cat.deskY + '% - clamp(13px, 2.3vw, 30px))';
+    const sit = () => {
+      cat.seatedAtDesk = true;
+      arrive();
+    };
+    if (!room.clientHeight || reducedMotion.matches) {
+      positionCat(cat, cat.deskX, seat);
+      sit();
+      return;
+    }
+    const feetOffset = cat.context.canvas.getBoundingClientRect().height * (131 / 148 - .5);
+    const back = cat.deskY - (feetOffset + 19) * 100 / room.clientHeight;
+    walkOfficeCat(cat, cat.deskX, back, () => {
+      cat.position.style.setProperty('--cat-travel-duration', '180ms');
+      positionCat(cat, cat.deskX, seat);
+      cat.restTimer = setTimeout(sit, 180);
+    });
+  };
+  if (task?.status === 'review') {
+    const requestReview = () => {
+      cat.marker.dataset.motion = reducedMotion.matches ? 'reporting' : 'raising-paw';
+      cat.caption.hidden = true;
+      cat.reviewButton.hidden = false;
+      cat.restTimer = setTimeout(() => { cat.marker.dataset.motion = 'reporting'; }, 1300);
+    };
+    if (cat.marker.dataset.motion === 'working') requestReview();
+    else {
+      cat.marker.dataset.motion = 'walking';
+      cat.caption.textContent = name;
+      walkToSeat(requestReview);
+    }
+    return;
+  }
+  if (!task) {
+    stroll(cat);
+    return;
+  }
+  cat.marker.dataset.motion = 'walking';
+  cat.caption.textContent = name;
+  const workAtDesk = () => {
+    cat.marker.dataset.motion = 'working';
+    cat.desk.dataset.active = 'true';
+    cat.caption.textContent = name + ' · ' + runningTaskLabel(task);
+  };
+  walkToSeat(() => {
+    workAtDesk();
+    if (!isResearchTask(task.title)) return;
+    cat.restTimer = setTimeout(() => {
+      cat.desk.dataset.active = 'false';
+      cat.marker.dataset.motion = 'walking';
+      cat.caption.textContent = name;
+      walkOfficeCat(cat, 82, 74, () => {
+        cat.marker.dataset.motion = 'checking';
+        cat.caption.textContent = name + ' · 자료 확인';
+        cat.restTimer = setTimeout(() => {
+          cat.marker.dataset.motion = 'walking';
+          cat.caption.textContent = name;
+          walkToSeat(workAtDesk);
+        }, 1200);
+      });
+    }, 900);
+  });
+}
+
+window.addEventListener('bori-briefing-request', event => {
+  const cat = officeCats.get('bori');
+  const panel = document.querySelector('#bori-briefing');
+  if (briefingVisit || cat.taskStatus === 'running' || !room.clientHeight ||
+      document.querySelector('dialog[open]')) return;
+  const visit = { day: event.detail.day, manual: event.detail.manual };
+  stopCoffeeChat(cat);
+  briefingVisit = visit;
+  clearTimeout(cat.restTimer);
+  cat.marker.removeAttribute('data-strolling');
+  cat.reviewButton.hidden = true;
+  cat.caption.hidden = false;
+  cat.caption.textContent = cat.name;
+  cat.marker.dataset.motion = 'walking';
+  const floor = room.getBoundingClientRect();
+  const boss = managerModel.getBoundingClientRect();
+  const model = cat.context.canvas.getBoundingClientRect();
+  const feetOffset = model.height * (131 / 148 - .5);
+  const x = Math.max(10, Math.min(90, (boss.left + boss.width / 2 - floor.left) / floor.width * 100));
+  const bossFeet = boss.top + boss.height * 131 / 148 - floor.top;
+  const desk = managerDesk.getBoundingClientRect();
+  const bossCenter = boss.left + boss.width / 2;
+  const atDesk = bossCenter >= desk.left && bossCenter <= desk.right && bossFeet <= desk.bottom - floor.top + 4 &&
+    bossFeet >= desk.top - floor.top - 25;
+  const front = Math.min(floor.height - 12, atDesk
+    ? desk.bottom - floor.top + 18
+    : bossFeet + Math.max(22, model.height * .28));
+  const y = (front - feetOffset) / floor.height * 100;
+  function resume() {
+    if (briefingVisit !== visit) return;
+    briefingVisit = undefined;
+    cat.caption.classList.remove('briefing-caption');
+    if (cat.task) {
+      cat.taskStatus = undefined;
+      updateOffice('bori', cat.task);
+    } else {
+      stroll(cat);
+    }
+  }
+  const started = walkOfficeCat(cat, x, y, () => {
+    if (briefingVisit !== visit) return;
+    cat.marker.dataset.motion = 'idle';
+    cat.caption.classList.add('briefing-caption');
+    cat.caption.textContent = '오늘 일정 브리핑드립니다!';
+    window.dispatchEvent(new CustomEvent('bori-briefing-started'));
+    cat.restTimer = setTimeout(() => {
+      if (briefingVisit !== visit) return;
+      window.dispatchEvent(new CustomEvent('bori-briefing-ready', { detail: visit }));
+      if (panel.open) panel.addEventListener('close', resume, { once: true });
+      else resume();
+    }, 2000);
+  });
+  if (started === false) resume();
+  else event.preventDefault();
+});
+
+function stopCoffeeChat(cat) {
+  if (!coffeeChat?.cats.includes(cat)) return;
+  clearTimeout(coffeeChat.timer);
+  for (const guest of coffeeChat.cats) {
+    guest.caption.classList.remove('coffee-chat-caption');
+    guest.caption.textContent = guest.name;
+  }
+  coffeeChat = undefined;
+}
+
+function planLeisureDeparture(cat, delay = 4000 + Math.random() * 14000) {
+  clearTimeout(cat.restTimer);
+  cat.restTimer = setTimeout(() => {
+    if (cat.task) return;
+    if (document.hidden || reducedMotion.matches) planLeisureDeparture(cat);
+    else stroll(cat);
+  }, delay);
+}
+
+function greetAtCoffeeCorner(arrival) {
+  if (coffeeChat || document.hidden) return;
+  const partner = [...officeCats.values()].find(cat => cat !== arrival && !cat.task &&
+    cat.leisureSpot?.pose === 'coffee' && cat.marker.dataset.motion === 'coffee');
+  if (!partner) return;
+  const [hello, reply] = coffeeChats[Math.floor(Math.random() * coffeeChats.length)];
+  const show = (cat, line) => {
+    cat.caption.textContent = cat.name + ' · ' + line;
+    cat.caption.classList.add('coffee-chat-caption');
+  };
+  const chat = { cats: [arrival, partner] };
+  coffeeChat = chat;
+  for (const cat of chat.cats) planLeisureDeparture(cat, 5200);
+  show(arrival, hello);
+  chat.timer = setTimeout(() => {
+    arrival.caption.textContent = arrival.name;
+    arrival.caption.classList.remove('coffee-chat-caption');
+    show(partner, reply);
+    chat.timer = setTimeout(() => stopCoffeeChat(partner), 2300);
+  }, 2300);
+}
+
+function pauseAtLeisureSpot(cat, arrived = false) {
+  cat.marker.removeAttribute('data-strolling');
+  const { x, y, pose } = cat.leisureSpot;
+  cat.marker.dataset.motion = pose;
+  cat.caption.textContent = cat.name;
+  if (!arrived || pose === 'relaxing') positionCat(cat, x, y);
+  planLeisureDeparture(cat);
+  if (pose === 'coffee') greetAtCoffeeCorner(cat);
+}
+
+function stroll(cat) {
+  stopCoffeeChat(cat);
+  const previousSpot = cat.leisureSpot;
+  const occupied = new Set([...officeCats.values()].map(employee => employee.leisureSpot));
+  const available = leisureSpots.filter(spot => !occupied.has(spot));
+  const distant = available.filter(spot => !previousSpot || Math.hypot(spot.x - previousSpot.x, spot.y - previousSpot.y) >= 22);
+  const choices = distant.length ? distant : available;
+  const destination = choices[Math.floor(Math.random() * choices.length)];
+  cat.leisureSpot = destination;
+  if (reducedMotion.matches) {
+    pauseAtLeisureSpot(cat);
+    return;
+  }
+
+  cat.marker.dataset.strolling = '';
+  cat.marker.dataset.motion = 'walking';
+  cat.caption.textContent = cat.name;
+  if (!walkOfficeCat(cat, destination.x, destination.y, () => pauseAtLeisureSpot(cat, true), true)) {
+    cat.leisureSpot = null;
+    planLeisureDeparture(cat);
+  }
+}
+
+function isResearchTask(title) {
+  return /검색|조사|리서치|자료.{0,12}(찾|수집)|자료.{0,12}찾아/.test(title);
+}
+
+function isMangoStoryboard(task) {
+  return task.employee === 'mango' && !task.suniManual && !task.ai && /콘티|스토리보드/.test(task.title);
+}
+
+const localStoryboard = false;
+
+const storyboardSchema = {
+  type: 'object',
+  required: ['cuts'],
+  properties: {
+    cuts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['scene', 'dialogue', 'narration'],
+        properties: {
+          scene: { type: 'string' },
+          dialogue: { type: 'string' },
+          narration: { type: 'string' }
+        }
+      }
+    }
+  }
+};
+
+function readStoryboardCuts(raw) {
+  const text = raw.trim().replaceAll('**', '').replaceAll('__', '');
+  const json = raw.match(/\{[\s\S]*\}/)?.[0];
+  if (json) {
+    try {
+      const { cuts } = JSON.parse(json);
+      if (Array.isArray(cuts) && cuts.length && cuts.every(cut =>
+        typeof cut?.scene === 'string' && cut.scene.trim() &&
+        [cut.dialogue, cut.narration].some(line => typeof line === 'string' && line.trim()))) return cuts;
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+  }
+  const heading = /^[ \t]*(?:#{1,6}[ \t]*)?(?:[-*][ \t]+)?(?:(?:cut|panel)[ \t]*#?[ \t]*\d+\b|\d+[ \t]*컷)[ \t]*[:.)—-]?[ \t]*([^\r\n]*)/gimu;
+  const matches = [...text.matchAll(heading)];
+  if (!matches.length) return [];
+  const cuts = matches.map((match, index) => {
+    const body = text.slice(match.index + match[0].length, matches[index + 1]?.index).trim();
+    const cut = { scene: match[1].trim(), dialogue: '', narration: '' };
+    let field = 'scene';
+    for (const line of body.split(/\r?\n/)) {
+      const label = /^\s*(?:[-*]\s+)?(scene|dialogue|narration)\s*[:—-]\s*(.*)$/i.exec(line);
+      if (label) field = label[1].toLowerCase();
+      const value = (label ? label[2] : line).trim();
+      if (value) cut[field] = [cut[field], value].filter(Boolean).join('\n');
+    }
+    return cut;
+  });
+  return cuts.every(cut => cut.scene) ? cuts : [];
+}
+
+async function runMangoStoryboard(task) {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const resources = [];
+  activeRuns.set(task, () => controller.abort());
+  delete task.generationError;
+  try {
+    if (!window.LanguageModel || !window.Translator) {
+      throw new Error('Chrome 내장 AI를 사용할 수 없어요. 최신 PC용 Chrome에서 이 사무실을 열어 주세요.');
+    }
+    const english = [{ type: 'text', languages: ['en'] }];
+    const writing = { expectedInputs: english, expectedOutputs: english };
+    const koreanToEnglish = { sourceLanguage: 'ko', targetLanguage: 'en' };
+    const englishToKorean = { sourceLanguage: 'en', targetLanguage: 'ko' };
+    const availability = await Promise.all([
+      LanguageModel.availability(writing),
+      Translator.availability(koreanToEnglish),
+      Translator.availability(englishToKorean)
+    ]);
+    signal.throwIfAborted();
+    if (availability.includes('unavailable')) {
+      throw new Error('이 브라우저에서 내장 글쓰기·번역 모델을 사용할 수 없어요. PC용 Chrome에서 다시 열어 주세요.');
+    }
+    const track = async (pending) => {
+      const resource = await pending;
+      if (signal.aborted) {
+        resource.destroy();
+        signal.throwIfAborted();
+      }
+      resources.push(resource);
+      return resource;
+    };
+    const monitor = download => {
+      download.addEventListener('downloadprogress', () => {
+        feedback.textContent = 'Chrome이 콘티 작성에 필요한 모델을 다운로드하고 있어요.';
+      });
+    };
+    const [writer, toEnglish, toKorean] = await Promise.all([
+      track(LanguageModel.create({
+        ...writing, signal, monitor,
+        initialPrompts: [{
+          role: 'system',
+          content: 'You are Mango, a webtoon writer. Write a complete cut-by-cut storyboard in English. Follow the episode, requested cut count, characters and plot. Prioritize the latest revision and preserve unaffected content. Each cut must include a scene plus dialogue or narration. Follow the requested output format and use an empty string for unused fields.'
+        }]
+      })),
+      track(Translator.create({ ...koreanToEnglish, signal, monitor })),
+      track(Translator.create({ ...englishToKorean, signal, monitor }))
+    ]);
+    feedback.textContent = '망고가 콘티를 작성하고 있어요.';
+    const request = await toEnglish.translate(task.title, { signal });
+    const revisions = [];
+    for (const note of task.notes) revisions.push(await toEnglish.translate(note, { signal }));
+    const previous = task.storyboardSource || (task.output ? await toEnglish.translate(task.output, { signal }) : '');
+    const input = JSON.stringify({ request, previous, revisions });
+    let cuts = [];
+    try {
+      const raw = await writer.prompt('Write the storyboard as JSON.\n' + input, {
+        signal, responseConstraint: storyboardSchema
+      });
+      cuts = readStoryboardCuts(raw);
+    } catch (error) {
+      if (!['NotSupportedError', 'TypeError', 'SyntaxError'].includes(error.name)) throw error;
+    }
+    if (!cuts.length) {
+      const raw = await writer.prompt(
+        'Write the full storyboard as plain text. Use a line headed Cut 1, Cut 2, and so on. Under each heading put Scene:, Dialogue:, and/or Narration: on separate lines.\n' + input,
+        { signal }
+      );
+      cuts = readStoryboardCuts(raw);
+    }
+    if (!cuts.length) {
+      throw new Error('장면과 대사 또는 나레이션이 담긴 콘티를 받지 못했어요. 다시 시도해 주세요.');
+    }
+    const output = [];
+    for (const [index, cut] of cuts.entries()) {
+      const lines = [String(index + 1) + '컷'];
+      for (const [label, line] of [['장면', cut.scene], ['대사', cut.dialogue], ['나레이션', cut.narration]]) {
+        if (typeof line === 'string' && line.trim()) {
+          lines.push(label + ' — ' + await toKorean.translate(line, { signal }));
+        }
+      }
+      output.push(lines.join('\n'));
+    }
+    signal.throwIfAborted();
+    task.output = output.join('\n\n');
+    task.storyboardSource = JSON.stringify(cuts);
+    task.localStoryboard = true;
+    task.history.push('망고가 Chrome 내장 AI로 콘티 ' + (task.notes.length + 1) + '차 초안을 작성했습니다.');
+    task.status = 'review';
+    feedback.textContent = '망고가 콘티를 올렸어요. 결재 요청에서 전문을 확인해 주세요.';
+  } catch (error) {
+    if (signal.aborted) return;
+    task.generationError = ({
+      NotAllowedError: 'Chrome 내장 모델을 준비하려면 아래 다시 시도 버튼을 직접 눌러 주세요.',
+      NotSupportedError: '이 Chrome 또는 PC에서 내장 글쓰기·번역 모델을 사용할 수 없어요.',
+      SyntaxError: '콘티 형식이 올바르지 않아요. 다시 시도해 주세요.'
+    })[error.name] || error.message;
+    feedback.textContent = task.generationError;
+    task.status = 'failed';
+  } finally {
+    const cancelled = signal.aborted;
+    controller.abort();
+    for (const resource of resources) resource.destroy();
+    if (!cancelled) {
+      activeRuns.delete(task);
+      if (task.status === 'failed') startNext(task.employee);
+      render();
+    }
+  }
+}
+
+function demoStoryboard(task) {
+  const episode = task.title.match(/\d+\s*화/u)?.[0]?.replace(/\s/g, '');
+  const revised = task.notes.length % 2 === 1;
+  return [
+    (episode ? episode + ' ' : '') + '콘티 가상 초안 · 사무실에 남은 봉투',
+    '1컷\n장면 — 퇴근 직전, 신입 고양이가 사무실 간식 선반에서 이름 없는 봉투를 발견한다.\n대사 — 신입 “이건 누가 두고 간 거지?”',
+    revised
+      ? '2컷\n장면 — 신입이 봉투를 챙기는 대신 공용 테이블에 올려두고 메모를 붙인다.\n대사 — 신입 “주인이 찾을 때까지 여기 두자.”'
+      : '2컷\n장면 — 신입이 봉투를 열려는 순간, 동료가 커피잔을 들고 다가온다.\n대사 — 동료 “잠깐. 거기 붙은 이름부터 봐.”',
+    revised
+      ? '3컷\n장면 — 다음 날, 봉투 옆에 신입 이름이 적힌 쪽지가 놓여 있다.\n나레이션 — 주인을 찾아주려던 봉투가 먼저 내 자리를 찾아왔다.'
+      : '3컷\n장면 — 봉투 뒷면에 ‘내일 제일 먼저 오는 사람에게’라고 적혀 있다. 신입이 벽시계를 올려다본다.\n나레이션 — 그날 처음으로, 내일 출근이 조금 기다려졌다.'
+  ].join('\n\n');
+}
+
+function runningTaskLabel(task) {
+  return isMangoStoryboard(task) ? '콘티 작성' : summarizeTask(task.title);
+}
+
+function summarizeTask(title) {
+  const categories = [
+    [/주문|배달/, '주문'], [/요약|정리/, '요약'], [/번역/, '번역'], [/검색|조사|찾아/, '조사'],
+    [/분석|비교/, '분석'], [/작성|초안/, '작성'], [/검토|확인/, '검토'],
+    [/일정|예약/, '일정']
+  ];
+  const category = categories.find(([pattern]) => pattern.test(title));
+  if (!category) return '업무 요청';
+  const [pattern, action] = category;
+  const beforeAction = title.slice(0, title.search(pattern)).trim();
+  const object = beforeAction.match(/([\p{L}\p{N}]+)[을를]\s*$/u)?.[1];
+  const words = beforeAction.split(/\s+/).filter(word => /^[\p{L}\p{N}]{1,12}$/u.test(word)
+    && !/^(내가|제가|나한테|저한테|나에게|저에게|좀|빨리|지금|부탁해)$/.test(word));
+  const subject = object || words.slice(-2).join(' ');
+  return subject ? subject + ' ' + action : action;
+}
+
+const activeRuns = new Map();
+const clearDemoTasks = document.querySelector('#clear-demo-tasks');
+clearDemoTasks.onclick = () => {
+  if (!tasks.length || !window.confirm('이 브라우저에 저장된 데모 업무와 이력을 모두 삭제할까요?')) return;
+  for (const cancel of activeRuns.values()) cancel();
+  activeRuns.clear();
+  tasks = [];
+  feedback.textContent = '';
+  render();
+};
+
+function startNext(id, preferredTask) {
+  if (tasks.some(task => task.employee === id && ['running', 'review'].includes(task.status))) return;
+  const task = preferredTask || tasks.find(item => item.employee === id && item.status === 'queued' && !item.ai);
+  if (!task) return;
+  task.status = 'running';
+  if (task.suniManual) return;
+  if (localStoryboard && isMangoStoryboard(task)) {
+    void runMangoStoryboard(task);
+    return;
+  }
+  const timer = setTimeout(() => {
+    activeRuns.delete(task);
+    if (isMangoStoryboard(task)) task.output = demoStoryboard(task);
+    const revision = task.notes.at(-1);
+    task.history.push('작업 완료 보고 ' + (task.notes.length + 1) + '차 · 데모 · ' + employees[id][2]
+      + (revision ? ' 수정 요청 내용: ' + revision : ''));
+    task.status = 'review';
+    render();
+  }, isResearchTask(task.title) ? 6200 : 3600);
+  activeRuns.set(task, () => clearTimeout(timer));
+}
+
+function makeCancelButton(task, view) {
+  const button = element('button', '작업 취소', 'secondary');
+  button.onclick = () => {
+    if (!['queued', 'running', 'review'].includes(task.status)) return;
+    task.status = 'cancelled';
+    activeRuns.get(task)?.();
+    activeRuns.delete(task);
+    task.history.push('관리자가 작업을 취소했습니다.');
+    startNext(task.employee);
+    render();
+    if (view === 'pending') pendingDialog.querySelector('button').focus();
+    if (view === 'history') reports.querySelectorAll('article')[tasks.length - 1 - tasks.indexOf(task)]?.focus();
+  };
+  return button;
+}
+
+function renderPending() {
+  const pending = tasks.filter(task => ['queued', 'running', 'review'].includes(task.status));
+  document.querySelector('#whiteboard-count').textContent = pending.length + '건';
+  const visible = pendingReviewsOnly ? pending.filter(task => task.status === 'review') : pending;
+  if (visible.length) {
+    const list = element('ul', '');
+    for (const task of visible) {
+      const item = element('li', '');
+      item.append(renderTaskCard(task, pendingReviewsOnly ? 'review' : 'pending'));
+      list.append(item);
+    }
+    pendingList.replaceChildren(list);
+  } else {
+    pendingList.replaceChildren(element('p', pendingReviewsOnly ? '결재 대기 업무가 없습니다.' : '남은 업무가 없습니다.', 'muted'));
+  }
+}
+
+function render() {
+  for (const task of tasks) {
+    if (!task.output && ['review', 'done'].includes(task.status) && isMangoStoryboard(task)) {
+      task.output = demoStoryboard(task);
+    }
+  }
+  clearDemoTasks.hidden = !tasks.length;
+  if (reviewDialog.open) {
+    if (reviewTask?.status === 'review') reviewReport.replaceChildren(renderTaskCard(reviewTask, 'review'));
+    else reviewDialog.close();
+  }
+  try { localStorage.setItem(storageKey, JSON.stringify(tasks)); } catch { /* Storage may be disabled. */ }
+  renderPending();
+  staff.replaceChildren();
+  for (const [id, [name, role]] of Object.entries(employees)) {
+    const card = element('button', '', 'employee');
+    card.type = 'button';
+    card.dataset.employee = id;
+    card.setAttribute('aria-haspopup', 'dialog');
+    if (id === 'bori') card.setAttribute('aria-controls', 'bori-calendar');
+    const assignWork = () => openAssignment(id);
+    card.onclick = id === 'bori' ? () => {
+      const calendar = document.querySelector('#bori-calendar');
+      if (!calendar.open) calendar.showModal();
+    } : assignWork;
+    if (id === 'bori') document.querySelector('#bori-assign').onclick = () => {
+      document.querySelector('#bori-calendar').close();
+      assignWork();
+    };
+    const portrait = makePortrait(id);
+    const activeTask = tasks.find(task => task.employee === id && ['running', 'review'].includes(task.status));
+    updateOffice(id, activeTask || null);
+    const states = tasks.filter(task => task.employee === id).map(task => task.status);
+    const status = ['running', 'review', 'queued'].find(state => states.includes(state));
+    const details = element('span', '');
+    details.append(element('strong', name), element('span', role, 'muted'),
+      element('span', status === 'running' ? runningTaskLabel(activeTask) : labels[status] || '휴식 중', 'badge'));
+    card.append(portrait, details);
+    staff.append(card);
+  }
+  reports.replaceChildren();
+  if (!tasks.length) reports.append(element('p', '업무를 맡기면 여기에 진행 상태와 결과가 표시됩니다.', 'muted'));
+  for (const task of [...tasks].reverse()) reports.append(renderTaskCard(task, 'history'));
+  const recent = document.querySelector('#recent-history');
+  recent.replaceChildren();
+  const resolved = tasks.filter(task => ['review', 'done', 'cancelled'].includes(task.status));
+  if (!resolved.length) recent.append(element('p', '아직 보고 이력이 없습니다.', 'muted'));
+  for (const task of resolved.slice(-3).reverse()) {
+    recent.append(element('p', task.title + ' · ' + employees[task.employee][0] + ' · ' + labels[task.status]));
+  }
+  renderWork();
+}
+
+function renderWork() {
+  for (const button of workStaff.children) {
+    const selected = button.dataset.employee === selectedEmployee;
+    button.classList.toggle('secondary', !selected);
+    button.setAttribute('aria-pressed', selected);
+  }
+  const owned = tasks.filter(task => task.employee === selectedEmployee);
+  const active = owned.filter(task => ['queued', 'running', 'review'].includes(task.status) || task.generationError
+    || (task.output && task.status === 'done'));
+  const remaining = document.querySelector('#employee-work');
+  remaining.replaceChildren(...active.map(task => renderTaskCard(task, 'work')));
+  if (!active.length) remaining.append(element('p', '남은 업무가 없습니다.', 'muted'));
+
+  const start = new Date((workDate.value || todayValue) + 'T00:00:00');
+  start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  document.querySelector('#work-week').textContent = taskDate.format(start) + ' ~ ' + taskDate.format(end - 1) + ' · 배정일 기준';
+  const weekly = document.querySelector('#weekly-work');
+  weekly.replaceChildren();
+  for (const task of owned.filter(task => task.createdAt >= +start && task.createdAt < +end).reverse()) {
+    weekly.append(element('p', taskDate.format(task.createdAt) + ' · ' + task.title + ' · ' + labels[task.status]));
+  }
+  if (!weekly.children.length) weekly.append(element('p', '이 주에 배정된 업무가 없습니다.', 'muted'));
+}
+
+function renderTaskCard(task, view) {
+    const card = element('article', '');
+    card.append(element('h3', task.title),
+      element('p', view === 'pending' ? employees[task.employee][0]
+        : employees[task.employee][0] + ' · ' + (task.status === 'running' ? runningTaskLabel(task) : labels[task.status]), 'badge'));
+    if (view !== 'pending') {
+      const history = element('ol', '');
+      for (const entry of task.history) {
+        if (entry.startsWith('이전 SUNI 답변\n')) continue;
+        history.append(element('li', entry));
+      }
+      card.append(history);
+      if (task.createdAt) card.append(element('p', '배정일 ' + taskDate.format(task.createdAt), 'muted'));
+    }
+    if (task.generationError && task.status === 'failed') {
+      card.append(element('p', task.generationError, 'muted'));
+      const retry = element('button', '콘티 작성 다시 시도');
+      retry.onclick = () => {
+        task.status = 'queued';
+        delete task.generationError;
+        startNext(task.employee);
+        render();
+      };
+      card.append(retry);
+    }
+    if (task.output && ['review', 'done'].includes(task.status)) {
+      const demo = isMangoStoryboard(task) && !task.localStoryboard;
+      card.append(element('h4', demo ? '컷별 콘티 초안 · 데모' : '컷별 콘티 초안'));
+      const cuts = task.output.split(/\n(?=\s*(?:[-*]\s+|#{1,6}\s+)?(?:\*\*)?\d+\s*컷)/u);
+      for (const cut of cuts) {
+        card.append(element('div', cut.trim().replace(/\*\*([^*\n]+)\*\*/g, '$1'), 'suni-result'));
+      }
+      if (demo) card.append(element('p', '가상 예시예요. 수정 요청은 기록하고 미리 준비한 다른 데모 초안을 보여드려요.', 'muted'));
+      if (task.status === 'done' && navigator.clipboard) {
+        const copy = element('button', 'SUNI에 넣을 콘티 복사', 'secondary');
+        copy.type = 'button';
+        const copied = element('p', '');
+        copied.setAttribute('role', 'status');
+        copy.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(task.output);
+            copied.textContent = '승인된 초안을 복사했어요.';
+          } catch {
+            copied.textContent = '복사 권한을 확인하거나 위 초안을 직접 선택해 복사해 주세요.';
+          }
+        };
+        card.append(copy, copied);
+      }
+    }
+    if (task.suniManual && task.status === 'running' && view === 'work') {
+      const resultForm = element('form', '');
+      const answer = element('textarea', '');
+      answer.id = 'suni-answer-' + tasks.indexOf(task);
+      answer.required = true;
+      answer.placeholder = '11컷\n[지문] 어두운 사무실에 덩그러니 놓인 김팀장의 책상.\n[내레이션] 그때의 나는 몰랐다.';
+      answer.value = task.resultDraft || '';
+      answer.oninput = () => { task.resultDraft = answer.value; };
+      const label = element('label', 'SUNI 채팅 답변 붙여 넣기');
+      label.htmlFor = answer.id;
+      resultForm.append(label, answer, element('button', '답변 등록'));
+      resultForm.onsubmit = event => {
+        event.preventDefault();
+        const result = answer.value.trim();
+        if (!result || task.status !== 'running') return;
+        if (task.output) task.history.push('기존 콘티를 새 수정본으로 갱신했습니다.');
+        task.output = result;
+        delete task.resultDraft;
+        task.history.push('SUNI 채팅 답변을 직접 등록했습니다.');
+        task.status = 'review';
+        render();
+      };
+      card.append(resultForm);
+    }
+    if (view === 'pending' && task.status !== 'review') {
+      const actions = element('div', '', 'actions');
+      for (const label of ['승인', '수정 요청']) {
+        const button = element('button', label, label === '승인' ? undefined : 'secondary');
+        button.disabled = true;
+        actions.append(button);
+      }
+      actions.append(makeCancelButton(task, view));
+      card.append(actions);
+    }
+    if (view !== 'pending' && ['queued', 'running'].includes(task.status)) {
+      card.append(makeCancelButton(task, view));
+    }
+    if (task.status === 'review' && (view !== 'work' || task.suniManual || isMangoStoryboard(task))) {
+      const actions = element('div', '', 'actions');
+      const approve = element('button', '승인');
+      approve.onclick = () => {
+        task.status = 'done';
+        task.history.push('관리자가 승인했습니다.');
+        startNext(task.employee);
+        render();
+        if (view === 'pending') pendingDialog.querySelector('button').focus();
+        else if (view === 'history') reports.querySelectorAll('article')[tasks.length - 1 - tasks.indexOf(task)]?.focus();
+      };
+      const revise = element('button', task.ai ? '데모로 수정 요청' : '수정 요청', 'secondary');
+      const revision = element('form', '');
+      revision.hidden = !task.revisionOpen;
+      const note = element('textarea', '');
+      note.id = view + '-note-' + tasks.indexOf(task);
+      note.required = true;
+      note.maxLength = 300;
+      note.value = task.draft || '';
+      note.oninput = () => { task.draft = note.value; };
+      const label = element('label', '수정할 내용');
+      label.htmlFor = note.id;
+      revision.append(label, note, element('button', '수정 요청 보내기'));
+      revise.onclick = () => { task.revisionOpen = true; revision.hidden = false; note.focus(); };
+      revision.onsubmit = event => {
+        event.preventDefault();
+        const reason = note.value.trim();
+        if (!reason) { note.focus(); return; }
+        task.notes.push(reason);
+        task.draft = '';
+        task.revisionOpen = false;
+        task.history.push('수정 요청 · ' + reason);
+        task.ai = false;
+        task.status = 'queued';
+        startNext(task.employee, task);
+        render();
+        if (view === 'pending') pendingDialog.querySelector('button').focus();
+      };
+      actions.append(approve, revise, makeCancelButton(task, view));
+      card.append(actions, revision);
+    }
+    card.tabIndex = -1;
+    return card;
+}
+
+form.onsubmit = event => {
+  event.preventDefault();
+  const title = request.value.trim();
+  if (!title) { request.value = ''; request.reportValidity(); return; }
+  const id = assignee || assignSelect.value;
+  if (!Object.hasOwn(employees, id)) return;
+  const recurring = { employee: id, title };
+  window.dispatchEvent(new CustomEvent('cat-office-repeat-assignment', { detail: recurring }));
+  if (recurring.error) {
+    request.setCustomValidity(recurring.error);
+    request.reportValidity();
+    request.addEventListener('input', () => request.setCustomValidity(''), { once: true });
+    return;
+  }
+  if (recurring.handled) {
+    request.value = '';
+    feedback.textContent = recurring.message || '';
+    assignDialog.close();
+    recurring.open?.();
+    return;
+  }
+  const suniManual = false;
+  tasks.push({ title, employee: id, suniManual, createdAt: Date.now(), status: 'queued', notes: [], history: [
+    suniManual ? 'SUNI 채팅에서 업무를 실행한 뒤 업무 탭에서 답변을 등록해 주세요.' : '업무를 접수했습니다.'
+  ] });
+  request.value = '';
+  feedback.textContent = employees[id][0] + '에게 업무를 맡겼습니다.';
+  startNext(id);
+  render();
+  assignDialog.close();
+};
+
+const tetrisDialog = document.querySelector('#tetris-dialog');
+const tetrisCanvas = tetrisDialog.querySelector('canvas');
+const tetrisContext = tetrisCanvas.getContext('2d');
+const tetrisStatus = document.querySelector('#tetris-status');
+const tetrisColumns = 10;
+const tetrisRows = 20;
+const tetrisCell = 20;
+const tetrisShapes = [
+  ['#67cddd', ['1111']],
+  ['#ecc86d', ['11', '11']],
+  ['#af8cde', ['010', '111']],
+  ['#8cc47d', ['011', '110']],
+  ['#de8387', ['110', '011']],
+  ['#80a6df', ['100', '111']],
+  ['#e7a06c', ['001', '111']]
+];
+const tetrisKeys = { ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'rotate' };
+let tetrisBoard;
+let tetrisPiece;
+let tetrisBag;
+let tetrisLines;
+let tetrisTimer;
+
+function drawTetris() {
+  tetrisContext.fillStyle = '#21192c';
+  tetrisContext.fillRect(0, 0, tetrisCanvas.width, tetrisCanvas.height);
+  function drawCell(x, y, color) {
+    tetrisContext.fillStyle = color || '#30243d';
+    tetrisContext.fillRect(x * tetrisCell + 1, y * tetrisCell + 1, tetrisCell - 2, tetrisCell - 2);
+  }
+  tetrisBoard.forEach((row, y) => row.forEach((color, x) => drawCell(x, y, color)));
+  tetrisPiece.shape.forEach((row, y) => row.forEach((filled, x) => {
+    if (filled) drawCell(tetrisPiece.x + x, tetrisPiece.y + y, tetrisPiece.color);
+  }));
+}
+
+function canPlaceTetris(shape, x, y) {
+  return shape.every((row, dy) => row.every((filled, dx) => !filled ||
+    (x + dx >= 0 && x + dx < tetrisColumns && y + dy < tetrisRows && !tetrisBoard[y + dy][x + dx])));
+}
+
+function spawnTetris() {
+  if (!tetrisBag.length) tetrisBag = [...tetrisShapes];
+  const index = Math.floor(Math.random() * tetrisBag.length);
+  const [color, rows] = tetrisBag.splice(index, 1)[0];
+  const shape = rows.map(row => [...row].map(Number));
+  tetrisPiece = { color, shape, x: Math.floor((tetrisColumns - shape[0].length) / 2), y: 0 };
+  return canPlaceTetris(shape, tetrisPiece.x, 0);
+}
+
+function stepTetris(action) {
+  if (!tetrisTimer || !tetrisDialog.open) return;
+  const { shape, x, y, color } = tetrisPiece;
+  if (action === 'rotate') {
+    const rotated = shape[0].map((_, column) => shape.map(row => row[column]).reverse());
+    const offset = [0, -1, 1, -2, 2].find(dx => canPlaceTetris(rotated, x + dx, y));
+    if (offset !== undefined) Object.assign(tetrisPiece, { shape: rotated, x: x + offset });
+  } else if (action === 'down') {
+    if (canPlaceTetris(shape, x, y + 1)) {
+      tetrisPiece.y++;
+    } else {
+      shape.forEach((row, dy) => row.forEach((filled, dx) => {
+        if (filled) tetrisBoard[y + dy][x + dx] = color;
+      }));
+      const remaining = tetrisBoard.filter(row => row.some(cell => !cell));
+      const cleared = tetrisRows - remaining.length;
+      const emptyRows = Array.from({ length: cleared }, () => Array(tetrisColumns).fill(null));
+      tetrisBoard = [...emptyRows, ...remaining];
+      tetrisLines += cleared;
+      if (!spawnTetris()) stopTetris();
+      tetrisStatus.textContent = (tetrisTimer ? '딴짓 중' : '게임 끝') + ' · 지운 줄 ' + tetrisLines;
+    }
+  } else {
+    const nextX = x + (action === 'left' ? -1 : 1);
+    if (canPlaceTetris(shape, nextX, y)) tetrisPiece.x = nextX;
+  }
+  drawTetris();
+}
+
+function stopTetris() {
+  clearInterval(tetrisTimer);
+  tetrisTimer = undefined;
+}
+
+function resetTetris() {
+  stopTetris();
+  tetrisBoard = Array.from({ length: tetrisRows }, () => Array(tetrisColumns).fill(null));
+  tetrisBag = [];
+  tetrisLines = 0;
+  spawnTetris();
+  tetrisStatus.textContent = '딴짓 중 · 지운 줄 0';
+  drawTetris();
+  tetrisTimer = setInterval(() => stepTetris('down'), 640);
+}
+
+function openTetris() {
+  tetrisDialog.showModal();
+  resetTetris();
+}
+
+const slackingMenu = document.querySelector('#slacking-menu');
+const stockDialog = document.querySelector('#stock-dialog');
+const newsDialog = document.querySelector('#news-dialog');
+const ottDialog = document.querySelector('#ott-dialog');
+let stockTimer;
+
+async function loadStockQuotes() {
+  const status = document.querySelector('#stock-status');
+  const list = document.querySelector('#stock-quotes');
+  if (!list.childElementCount) status.textContent = '시세 불러오는 중…';
+  try {
+    throw new Error('이 기능은 공개 체험판에서 제공되지 않아요.');
+    if (!response.ok) throw Error();
+    const quotes = await response.json();
+    if (!stockDialog.open) return;
+    let available = 0;
+    const cards = quotes.map(({ name, symbol, price, currency, change, marketStatus, tradedAt }) => {
+      const card = element('li', '');
+      const code = currency === 'USD' ? symbol.split('.')[0] : symbol;
+      card.append(element('strong', name), element('small', (currency === 'USD' ? '미국' : '국내') + ' · ' + code, 'muted'));
+      if (!Number.isFinite(price)) {
+        card.append(element('span', '시세 확인 불가', 'muted'));
+        return card;
+      }
+      available++;
+      const value = new Intl.NumberFormat('ko-KR', { style: 'currency', currency }).format(price);
+      card.append(element('span', value, 'quote-price'));
+      const percent = Number.isFinite(change) ? (change > 0 ? '+' : '') + change.toFixed(2) + '%' : '';
+      if (percent || marketStatus) card.append(element('small', [percent, marketStatus].filter(Boolean).join(' · ')));
+      if (tradedAt) card.append(element('time', tradedAt, 'muted'));
+      return card;
+    });
+    list.replaceChildren(...cards);
+    status.textContent = available ? '최근 시세 · 시장에 따라 지연될 수 있어요.' : '시세를 불러오지 못했어요.';
+  } catch {
+    status.textContent = list.childElementCount ? '새 시세를 불러오지 못해 이전 값을 표시해요.' : '시세를 불러오지 못했어요.';
+  }
+}
+
+function openSlacking() {
+  showManagerLine(['딴짓 중'], performance.now());
+  slackingMenu.showModal();
+}
+
+function newsText(html) {
+  const fragment = document.createElement('template');
+  fragment.innerHTML = html;
+  fragment.content.querySelectorAll('script, style, figure, figcaption').forEach(node => node.remove());
+  return fragment.content.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function addNewsSummary(row, title, description) {
+  const story = newsText(description)
+    .replace(/^\[[^\]]*뉴시스[^\]]*\]\s*[^=]{0,32}기자\s*=\s*/, '');
+  const words = title.match(/[가-힣A-Za-z0-9]{2,}/g) || [];
+  const sentences = story.split(/(?<=[.!?。！？])\s+/).filter(sentence => sentence.length >= 24);
+  const ranked = sentences.map((sentence, index) => ({
+    sentence, score: words.filter(word => sentence.includes(word)).length * 2 - index * .2
+  })).sort((a, b) => b.score - a.score).map(item => item.sentence);
+  const condensed = ranked.find(sentence => sentence.length <= 115) || ranked[0] || title;
+  const summary = condensed.replace(/^\[[^\]]+\]\s*/, '')
+    .replace(/(?:고|라고) (?:설명했다|밝혔다|전했다|덧붙였다)[.!]?$/, '')
+    .replace(/[“”‘’"]/g, '').trim();
+  const summaryLine = element('p', '', 'news-summary');
+  summaryLine.append(element('span', '요약', 'news-summary-label'),
+    summary.slice(0, 105) + (summary.length > 105 ? '…' : ''));
+  row.append(summaryLine);
+}
+
+async function loadOfficeNews() {
+  const status = document.querySelector('#news-status');
+  const list = document.querySelector('#news-headlines');
+  const today = date => new Date(+date + 9 * 3600000).toISOString().slice(0, 10);
+  const date = today(new Date());
+  const edition = document.querySelector('#news-edition-date');
+  edition.dateTime = date;
+  edition.textContent = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul', dateStyle: 'full'
+  }).format(new Date());
+  list.replaceChildren();
+  status.textContent = '오늘 뉴스 불러오는 중…';
+  try {
+    throw new Error('이 기능은 공개 체험판에서 제공되지 않아요.');
+    if (!response.ok) throw Error();
+    const feeds = await response.json();
+    const editionOrder = ['종합', '사회', '경제', '정치', '국제', '연예', '스포츠'];
+    const byCategory = new Map(feeds.map(feed => [feed.category, feed]));
+    let headlines = 0;
+    for (const category of editionOrder) {
+      const { source, article, titleHtml, description } = byCategory.get(category) || {};
+      const row = element('li', '');
+      const title = titleHtml ? newsText(titleHtml) : '';
+      if (category === '종합' && (!article || !title)) continue;
+      if (category === '종합') row.classList.add('news-featured');
+      row.append(element('strong', category === '종합' ? '종합 톱기사' : category, 'news-category'));
+      if (article && title) {
+        const headline = element('a', title);
+        headline.href = article;
+        headline.target = '_blank';
+        headline.rel = 'noopener noreferrer';
+        const heading = element('h3', '', 'news-headline');
+        heading.append(headline);
+        row.append(heading);
+        if (description) addNewsSummary(row, title, description);
+        headlines++;
+      } else {
+        const fallback = element('a', '대표 기사 확인 불가 · 분야 페이지 열기');
+        fallback.href = source || 'https://www.newsis.com/';
+        fallback.target = '_blank';
+        fallback.rel = 'noopener noreferrer';
+        row.append(fallback);
+        row.classList.add('news-unavailable');
+      }
+      list.append(row);
+    }
+    status.textContent = headlines ? '' : '대표 기사를 불러오지 못했어요.';
+  } catch {
+    status.textContent = '뉴스를 불러오지 못했어요. 아래 링크에서 직접 확인할 수 있어요.';
+  }
+}
+
+slackingMenu.querySelector('.desk-menu-actions').onclick = event => {
+  const choice = event.target.closest('[data-slacking]')?.dataset.slacking;
+  if (!choice) return;
+  slackingMenu.close();
+  if (choice === 'game') openTetris();
+  if (choice === 'stocks') {
+    stockDialog.showModal();
+    void loadStockQuotes();
+    stockTimer = setInterval(loadStockQuotes, 60000);
+  }
+  if (choice === 'news') {
+    newsDialog.showModal();
+    void loadOfficeNews();
+  }
+  if (choice === 'ott') ottDialog.showModal();
+};
+stockDialog.addEventListener('close', () => clearInterval(stockTimer));
+for (const dialog of [tetrisDialog, stockDialog, newsDialog, ottDialog]) {
+  dialog.querySelector('[data-back-slacking]').onclick = () => {
+    dialog.close();
+    slackingMenu.showModal();
+  };
+}
+
+tetrisDialog.addEventListener('close', stopTetris);
+tetrisDialog.addEventListener('keydown', event => {
+  const action = tetrisKeys[event.key];
+  if (!action) return;
+  event.preventDefault();
+  event.stopPropagation();
+  stepTetris(action);
+});
+tetrisDialog.querySelector('.tetris-controls').onclick = event => {
+  const action = event.target.closest('[data-tetris]')?.dataset.tetris;
+  if (action) stepTetris(action);
+};
+document.querySelector('#tetris-reset').onclick = resetTetris;
+
+for (const dialog of document.querySelectorAll('.monitor-dialog, #assign-dialog, #pending-dialog, #bori-calendar')) {
+  const viewport = element('div', '', 'monitor-viewport');
+  viewport.append(...dialog.childNodes);
+  dialog.append(viewport);
+}
+
+for (const id of Object.keys(employees)) startNext(id);
+render();
+showPanel();
+
+function updateWindowSky(now = new Date()) {
+  const seoul = new Date(now.getTime() + 9 * 3600000);
+  const year = seoul.getUTCFullYear();
+  const day = (Date.UTC(year, seoul.getUTCMonth(), seoul.getUTCDate()) - Date.UTC(year, 0, 1)) / 86400000;
+  const minutes = seoul.getUTCHours() * 60 + seoul.getUTCMinutes() + seoul.getUTCSeconds() / 60;
+  // Estimate sunrise and sunset from solar declination and the equation of time.
+  const angle = 2 * Math.PI * (day + (minutes - 720) / 1440) / 365;
+  const equation = 229.18 * (.000075 + .001868 * Math.cos(angle) - .032077 * Math.sin(angle)
+    - .014615 * Math.cos(2 * angle) - .040849 * Math.sin(2 * angle));
+  const declination = .006918 - .399912 * Math.cos(angle) + .070257 * Math.sin(angle)
+    - .006758 * Math.cos(2 * angle) + .000907 * Math.sin(2 * angle)
+    - .002697 * Math.cos(3 * angle) + .00148 * Math.sin(3 * angle);
+  const radians = Math.PI / 180;
+  const latitude = 37.57 * radians;
+  const noon = 720 - 4 * (126.98 - 135) - equation;
+  const halfDay = Math.acos((Math.cos(90.833 * radians) - Math.sin(latitude) * Math.sin(declination))
+    / (Math.cos(latitude) * Math.cos(declination))) / radians * 4;
+  const sunrise = noon - halfDay;
+  const sunset = noon + halfDay;
+  const twilight = 35;
+  const night = minutes < sunrise - twilight || minutes > sunset + twilight;
+  const daylight = Math.max(0, Math.min(1, (minutes - sunrise) / 75, (sunset - minutes) / 75));
+  const progress = Math.max(0, Math.min(1, (minutes - sunrise) / (sunset - sunrise)));
+  const nightProgress = ((minutes - sunset + 1440) % 1440) / (1440 - (sunset - sunrise));
+  const path = night ? nightProgress : progress;
+  const windowView = document.querySelector('#office-window');
+  windowView.toggleAttribute('data-night', night);
+  windowView.style.setProperty('--sky-top', night ? '#182344' : 'hsl(' + (267 - 60 * daylight) + ' 67% ' + (66 + 7 * daylight) + '%)');
+  windowView.style.setProperty('--sky-bottom', night ? '#3a4871' : 'hsl(' + (27 + 174 * daylight) + ' 91% ' + (73 + 19 * daylight) + '%)');
+  windowView.style.setProperty('--body-x', (8 + path * 84) + '%');
+  windowView.style.setProperty('--body-y', (84 - Math.sin(Math.PI * path) * 53) + '%');
+  const lowSun = 1 - Math.sin(Math.PI * progress);
+  const windowX = 18 + progress * 64;
+  const floorX = 72 - progress * 44;
+  room.style.setProperty('--sunlight', String(daylight * .86));
+  room.style.setProperty('--sun-start-left', (windowX - 6) + '%');
+  room.style.setProperty('--sun-start-right', (windowX + 6) + '%');
+  room.style.setProperty('--sun-end-left', (floorX - 14 - lowSun * 8) + '%');
+  room.style.setProperty('--sun-end-right', (floorX + 14 + lowSun * 8) + '%');
+  room.style.setProperty('--night-light', String(1 - daylight));
+}
+
+updateWindowSky();
+setInterval(updateWindowSky, 15000);
+
+</script>
+</html>
