@@ -22,7 +22,8 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   function publishReservation(config) {
     window.dispatchEvent(new CustomEvent('cat-office-job-reservation', { detail: config ? {
       time: config.time, firstDay: config.firstDay, repeat: config.repeat,
-      paused: config.paused, missed: config.missed, lastRun: config.lastRun
+      paused: config.paused, cancelled: config.cancelled, missed: config.missed, lastRun: config.lastRun,
+      nextAt: nextReservationAt(config)
     } : null }));
   }
 
@@ -110,13 +111,13 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
   });
 
   function render(config, message) {
-    pause.hidden = runNow.hidden = !config;
+    pause.hidden = runNow.hidden = !config || Boolean(config.cancelled);
     pause.textContent = config?.paused ? '재개' : '일시정지';
     submit.disabled = pause.disabled = running;
-    runNow.disabled = running || Boolean(config?.paused);
+    runNow.disabled = running || Boolean(config?.paused || config?.cancelled);
     status.textContent = message || (config
       ? (config.repeat === false ? '한 번 ' : '매일 ') + config.time + ' · 서울 시간 · ' +
-        (config.paused ? '일시정지' : config.pendingRun ? '처리 중' : config.missed ? '예약 시각 지남' :
+        (config.cancelled ? '취소됨' : config.paused ? '일시정지' : config.pendingRun ? '처리 중' : config.missed ? '예약 시각 지남' :
           config.repeat === false && config.lastRun ? '실행 완료' : '예약 중') +
         (config.firstDay && !config.lastRun ? '\n첫 실행 ' + config.firstDay + ' ' + config.time : '') +
         (config.report ? '\n' + config.report.message : '') : '');
@@ -132,7 +133,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
         const config = read();
         const now = new Date(Date.now() + 9 * 3600000).toISOString();
         const day = now.slice(0, 10);
-        if (!config || config.paused) return;
+        if (!config || config.paused || config.cancelled) return;
         if (!manual && !config.pendingRun) {
           if (config.missed || config.lastRun === day || (config.repeat === false && config.lastRun)) return;
           const scheduledDay = config.repeat === false && config.firstDay ? config.firstDay : day;
@@ -192,13 +193,13 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
           const needsReview = reviews.filter(job => job.outcome === '확인 필요').length;
           config.report = { jobs: reviews.map(job => ({ ...job, calendarState: registered.has(job.id) ? '이전 등록' : '',
             finalDecision: decisions[job.id] || (pending.has(job.id) ? '최종 결재 대기' : '') })),
-            counts: { approved: approved.length, rejected, needsReview },
+            counts: { approved: approved.length, rejected, needsReview, matched: reviews.length },
             message: day + ' · 루루 조사 ' + jobs.length +
             '건 → 코코 1차 승인 ' + approved.length + '건 · 반려 ' + rejected + '건 · 확인 필요 ' +
             needsReview + '건 · 사장 결재 대기 ' + pending.size + '건' };
         } catch (error) {
           if (error.rateLimited) config.paused = true;
-          config.report = { message: day + ' · ' + (error.name === 'TimeoutError' || error.name === 'TypeError'
+          config.report = { failed: true, message: day + ' · ' + (error.name === 'TimeoutError' || error.name === 'TypeError'
             ? '공개 채용 출처에 연결하지 못했어요. 지금 조사로 다시 시도할 수 있어요.' : error.message) };
         } finally {
           running = false;
@@ -225,18 +226,25 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     }
   }
 
-  function armReservation() {
-    clearTimeout(reservationTimer);
-    const config = read();
-    if (!config || config.paused || running || !navigator.locks || config.missed ||
-        (config.repeat === false && config.lastRun && !config.pendingRun)) return;
+  function nextReservationAt(config) {
+    if (!config || config.cancelled || config.missed ||
+      (config.repeat === false && config.lastRun && !config.pendingRun)) return;
     const now = Date.now();
     const tomorrow = new Date(now + 33 * 3600000).toISOString().slice(0, 10);
     const today = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
     const todayAt = Date.parse(today + 'T' + config.time + ':00+09:00');
     const nextDay = config.lastRun === today || (config.repeat !== false && now - todayAt >= 60000) ? tomorrow : today;
     const day = config.firstDay > nextDay ? config.firstDay : nextDay;
-    const nextAt = config.pendingRun ? now : Date.parse(day + 'T' + config.time + ':00+09:00');
+    return config.pendingRun ? now : Date.parse(day + 'T' + config.time + ':00+09:00');
+  }
+
+  function armReservation() {
+    clearTimeout(reservationTimer);
+    const config = read();
+    if (!config || config.paused || running || !navigator.locks) return;
+    const nextAt = nextReservationAt(config);
+    if (!Number.isFinite(nextAt)) return;
+    const now = Date.now();
     const delay = nextAt <= now ? 250 : nextAt - now;
     reservationTimer = setTimeout(check, Math.min(delay, 2147483647));
   }
@@ -259,7 +267,7 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     const repeat = /매일/.test(request);
     const config = { ...previous, request, time, terms, firstDay, repeat,
       profile: profile ?? previous?.profile ?? defaultProfile,
-      seoulGyeonggiOnly: seoulGyeonggiOnly ?? previous?.seoulGyeonggiOnly ?? true,
+      seoulGyeonggiOnly: seoulGyeonggiOnly ?? previous?.seoulGyeonggiOnly ?? true, cancelled: false,
       paused: false, revision: crypto.randomUUID() };
     delete config.lastRun;
     delete config.pendingRun;
@@ -327,6 +335,21 @@ function startJobAutomation({ key, listJobs, readRequirements, defaultProfile, s
     armReservation();
     if (!config.paused) void check();
   };
+  window.addEventListener('cat-office-manage-job-reservation', event => {
+    const action = event.detail;
+    if (action === 'edit') { openSettings(); return; }
+    if (action === 'pause') { pause.onclick(); return; }
+    if (action === 'cancel') {
+      const config = read();
+      if (!config) return;
+      config.cancelled = true;
+      delete config.pendingRun;
+      config.revision = crypto.randomUUID();
+      write(config);
+      render(config);
+      armReservation();
+    }
+  });
   runNow.onclick = () => void check(true);
   window.addEventListener('storage', event => {
     if (event.key === key) { restoreStatus(); armReservation(); }

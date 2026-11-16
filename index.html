@@ -401,8 +401,8 @@ header div, main { max-width: 1440px; }
     <div id="reports"></div>
   </section>
 </main>
-<aside id="review-toast" class="review-toast" aria-label="코코 검토 알림" hidden>
-  <strong>코코 · 채용공고 검토 완료</strong>
+<aside id="review-toast" class="review-toast" aria-label="업무 실행 알림" hidden>
+  <strong id="review-toast-title">코코 · 채용공고 검토 완료</strong>
   <div id="review-toast-message" role="status"></div>
   <div class="actions"><button type="button" id="review-toast-open">업무 이력 보기</button><button type="button" id="review-toast-close" class="secondary">닫기</button></div>
 </aside>
@@ -546,7 +546,7 @@ header div, main { max-width: 1440px; }
 </dialog>
 <script src="office-cat.js"></script>
 <script defer src="calendar-ui.js?v=natural-schedule"></script>
-<script defer src="job-automation-core.js?v=archive-history"></script>
+<script defer src="job-automation-core.js?v=reservation-management"></script>
 <script defer src="job-automation.js?v=review-history"></script>
 
 <script>
@@ -556,7 +556,7 @@ const employees = {
   mango: ['망고', '콘텐츠 기획 담당', 'SUNI 웹툰 기획안에 한 줄 소개, 주요 인물, 회차별 사건, 다음 화로 이어지는 장면을 정리하는 구성을 제안합니다.'],
   bori: ['보리', '일정·운영 담당', '준비, 실행, 점검 순서로 할 일 목록을 제안합니다.']
 };
-const labels = { scheduled: '예약 대기', missed: '예약 시각 지남', queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
+const labels = { scheduled: '예약 대기', paused: '일시정지', missed: '예약 시각 지남', queued: '접수 대기', running: '작업 중', review: '결재 대기', done: '승인 완료', cancelled: '취소됨', failed: '실행 실패' };
 const storageKey = 'cat-office-public-demo-tasks';
 let tasks = [];
 try {
@@ -1677,7 +1677,7 @@ function startNext(id, preferredTask) {
 function makeCancelButton(task, view) {
   const button = element('button', '작업 취소', 'secondary');
   button.onclick = () => {
-    if (!['scheduled', 'queued', 'running', 'review'].includes(task.status)) return;
+    if (!['scheduled', 'paused', 'queued', 'running', 'review'].includes(task.status)) return;
     task.status = 'cancelled';
     activeRuns.get(task)?.();
     activeRuns.delete(task);
@@ -1884,11 +1884,13 @@ window.addEventListener('cat-office-job-reports', event => {
   pendingJobs = event.detail.pending || [];
   renderPending();
   const completed = event.detail.completed;
-  if (completed?.counts) {
+  if (completed?.counts || completed?.failed) {
     newestReview = completed;
-    const { approved, rejected, needsReview } = completed.counts;
-    document.querySelector('#review-toast-message').textContent =
-      '1차 승인 ' + approved + '건 · 반려 ' + rejected + '건 · 확인 필요 ' + needsReview + '건';
+    const counts = completed.counts;
+    document.querySelector('#review-toast-title').textContent = completed.failed ? '루루 · 채용공고 조회 실패' : '코코 · 채용공고 검토 완료';
+    document.querySelector('#review-toast-message').textContent = completed.failed ? completed.message :
+      !counts.matched ? '이번 조사에서 검색 조건에 맞는 공고가 없었어요.' :
+      '1차 승인 ' + counts.approved + '건 · 반려 ' + counts.rejected + '건 · 확인 필요 ' + counts.needsReview + '건';
     document.querySelector('#review-toast-open').textContent = pendingJobs.length ? '결재확인' : '업무 이력 보기';
     reviewToast.hidden = false;
   }
@@ -1934,7 +1936,7 @@ function renderWork() {
     date: task.scheduledAt || task.createdAt, title: task.title,
     status: labels[task.status], timed: Boolean(task.scheduledAt), task
   })).filter(item => item.date >= start && item.date < end);
-  if (selectedEmployee === 'lulu' && jobReservation) {
+  if (selectedEmployee === 'lulu' && jobReservation && !jobReservation.cancelled) {
     const config = jobReservation;
     const currentSeoulDay = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
     for (let date = start; date < end; date += dayMs) {
@@ -1957,10 +1959,65 @@ function renderWork() {
     const row = element('div', '', 'actions');
     row.append(element('p', (item.timed ? formatScheduledStart(item.date) : taskDate.format(item.date))
       + ' · ' + item.title + ' · ' + item.status));
-    if (item.task?.status === 'scheduled') row.append(makeCancelButton(item.task, 'work'));
+    if (['scheduled', 'paused'].includes(item.task?.status)) row.append(...scheduleTaskControls(item.task));
+
     return row;
   }));
   if (!rows.length) weekly.append(element('p', '이 주에 예약되거나 배정된 업무가 없습니다.', 'muted'));
+  if (selectedEmployee === 'lulu' && jobReservation && !jobReservation.cancelled) {
+    const config = jobReservation;
+    const controls = element('div', '', 'actions');
+    const dispatch = action => window.dispatchEvent(new CustomEvent('cat-office-manage-job-reservation', { detail: action }));
+    for (const [label, action] of [['채용공고 예약 변경', 'edit'], [config.paused ? '재개' : '일시정지', 'pause'], ['예약 취소', 'cancel']]) {
+      const button = element('button', label, 'secondary');
+      button.type = 'button';
+      button.onclick = () => dispatch(action);
+      controls.append(button);
+    }
+    const next = Number.isFinite(config.nextAt) ? ' · 다음 실행 ' + formatScheduledStart(config.nextAt) : '';
+    weekly.prepend(element('p', '루루 채용공고 조사 예약' + (config.paused ? ' · 일시정지' : '') + next), controls);
+  }
+}
+
+function scheduleTaskControls(task) {
+  const edit = element('button', '시간 변경', 'secondary');
+  const pause = element('button', task.status === 'paused' ? '재개' : '일시정지', 'secondary');
+  const editor = element('form', '');
+  editor.hidden = true;
+  const label = element('label', '새 시작 시각 (서울 시간)');
+  const input = element('input', '');
+  input.type = 'datetime-local';
+  input.required = true;
+  input.value = new Date(task.scheduledAt + 9 * 3600000).toISOString().slice(0, 16);
+  label.append(input);
+  editor.append(label, element('button', '저장'));
+  edit.type = pause.type = 'button';
+  edit.onclick = () => { editor.hidden = !editor.hidden; if (!editor.hidden) input.focus(); };
+  editor.onsubmit = event => {
+    event.preventDefault();
+    const next = Date.parse(input.value + ':00+09:00');
+    if (!(next > Date.now())) {
+      input.setCustomValidity('지금보다 이후의 시각을 선택해 주세요.');
+      input.reportValidity();
+      return;
+    }
+    task.scheduledAt = next;
+    task.history.push('예약 시각을 변경했습니다.');
+    render();
+  };
+  input.oninput = () => input.setCustomValidity('');
+  pause.onclick = () => {
+    if (task.status === 'paused' && task.scheduledAt <= Date.now()) {
+      editor.hidden = false;
+      input.focus();
+      input.setCustomValidity('예약 시각이 지났어요. 새 시각을 저장한 뒤 재개해 주세요.');
+      input.reportValidity();
+      return;
+    }
+    task.status = task.status === 'paused' ? 'scheduled' : 'paused';
+    render();
+  };
+  return [edit, pause, makeCancelButton(task, 'work'), editor];
 }
 
 function renderTaskCard(task, view) {
